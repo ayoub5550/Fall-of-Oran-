@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://db72v3j00py42"
-path="res://.godot/imported/zombie_cop.png-e4d84d7b08c20d83452cebecbef0b4f2.ctex"
+uid="uid://dr3c1tkl454cw"
+path="res://.godot/imported/zombie_girl_zombie_normal.png-f8e2adedc9ffcdf7244a1a56ef144ada.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "4e846d5ec608e6515db9788e194385af"
 }
 
 [deps]
 
-source_file="res://assets/zombie_cop.png"
-dest_files=["res://.godot/imported/zombie_cop.png-e4d84d7b08c20d83452cebecbef0b4f2.ctex"]
+source_file="res://assets/chars/zombie_girl_zombie_normal.png"
+dest_files=["res://.godot/imported/zombie_girl_zombie_normal.png-f8e2adedc9ffcdf7244a1a56ef144ada.ctex"]
 
 [params]
 
@@ -21,7 +24,7 @@ compress/lossy_quality=0.7
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

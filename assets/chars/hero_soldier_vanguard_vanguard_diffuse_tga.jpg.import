@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ddptixnenk5ll"
-path="res://.godot/imported/zombie_worker.png-52196b823cb7f2460e1753af9107787f.ctex"
+uid="uid://b5suvawl0uajv"
+path="res://.godot/imported/hero_soldier_vanguard_vanguard_diffuse_tga.jpg-865301c353bd5fc67b2f7b182e2a3df1.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "48f3ea86b56ac184b64ed3487294eff4"
 }
 
 [deps]
 
-source_file="res://assets/zombie_worker.png"
-dest_files=["res://.godot/imported/zombie_worker.png-52196b823cb7f2460e1753af9107787f.ctex"]
+source_file="res://assets/chars/hero_soldier_vanguard_vanguard_diffuse_tga.jpg"
+dest_files=["res://.godot/imported/hero_soldier_vanguard_vanguard_diffuse_tga.jpg-865301c353bd5fc67b2f7b182e2a3df1.ctex"]
 
 [params]
 
@@ -21,7 +24,7 @@ compress/lossy_quality=0.7
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

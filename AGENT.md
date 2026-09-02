@@ -87,9 +87,25 @@ README_AR.md         # Arabic player-facing readme
 - 16 zombies now (5 extra spawn spots at z −70..−86); logic tests expect 16.
 - Exit-gate green panel toned down (emissive 0.05,0.28,0.10, omni 0.7) — bright green looked arcade-y.
 
+## 7d. v1.4 realistic characters (Mixamo rigs + runtime retargeting)
+
+**Why**: owner rejected the low-poly Quaternius characters ("مجرد مضلعات"). Realistic rigged humans that are downloadable *without a login* are rare; these worked:
+- `assets/chars/zombie_girl.glb`, `zombie_jill.glb` — Mixamo zombie characters found as FBX in public GitHub repos (`angiecarojas/Zombie-Mixamo_ThreeJS`), converted with FBX2glTF `--embed`. Their body material exports with alpha 0 → **invisible** until `AnimLib.prep_materials()` disables transparency.
+- `assets/chars/hero_soldier.glb` — three.js `Soldier.glb` (Mixamo "Vanguard"), faces −Z already (rotation.y = 0, unlike Quaternius which needed PI).
+- `assets/chars/anim_*.glb` — Mixamo clips (idle/walk/run from the same repo, attack/death/idle/walk from `kdessaik/Last-Stand…`). Bone names had `mixamorig:` prefixes → stripped offline with pygltflib (node name edit) so every rig shares plain names (`Hips`, `Spine`, …).
+- Rejected: `mremireh_o_desbiens` (cartoon), NewPunch ShirtlessZombie (UE4 rig, FBX 7.7 → FBX2glTF exports no mesh; Godot ufbx imports it but bone names don't match Mixamo). CGTrader/Sketchfab/Mixamo all need logins.
+
+**`scripts/anim_lib.gd`** (`class_name AnimLib`, static):
+- `add_clip(target_ap, skel, glb_path, clip_name, loop)` — loads the anim GLB, copies tracks onto the target skeleton by bone name. Drops scale tracks and all position tracks except `Hips` (scaled by rest-hips-height ratio → fixes cm-vs-m exports). Rotations are re-expressed as `dst_rest * src_rest⁻¹ * q` so rigs with different rest poses still work.
+- **Crash pitfall**: instances of one PackedScene share the same `AnimationLibrary`. Adding a clip into the shared library segfaults the other instances (their playing animation is freed). `add_clip` duplicates the library once per player (meta `animlib_private`). Symptom was a signal-11 with 2+ zombies, none with 1.
+- `prep_materials(model, tint)` — duplicates every surface material, disables transparency, applies tint, roughness 0.8.
+
+**Gameplay wiring**: zombie.gd clips `idle/walk/run/bite/death`; death plays the clip then sinks after 3.2 s. Player clips `Idle/Walk/Run` (native) + `Death` (retargeted). Zombie scales girl 0.85 / jill 0.98; hero 0.95. Red eye omni reduced to 0.1 (it tinted the realistic skin red). Player has a soft blue fill OmniLight (0.9, range 3.2) so his back reads in the dark. `crawler` flag now just means a slower shambler (no crawl clip).
+
 ## 8. Roadmap ideas (not committed)
 
-- More districts of Oran (Sidi El Houari alleys, the port, Santa Cruz fort — see `concept_art/`).
+- More districts of Oran (Sidi El Houari alleys, the port, Santa Cruz fort — see `concept_art/`)
+- Realistic buildings/cars to match the v1.4 characters (owner will likely ask next).
 - Melee weapon + knife parry (RE4-style), weapon variety (shotgun), inventory/attaché case.
 - Zombie variety: crawler (anim exists: `Zombie|ZombieCrawl`), runner, armored cop.
 - Save system, chapters, boss fight at the port gate.

@@ -52,28 +52,35 @@ func _ready() -> void:
 	col.shape = cap
 	add_child(col)
 
-	# Hero 3D model (Quaternius animated man, CC0)
-	var hero_scene: PackedScene = load("res://assets/hero.glb")
+	# Hero 3D model — realistic Mixamo soldier (three.js Soldier.glb, bones renamed), see AGENT.md §7d
+	var hero_scene: PackedScene = load("res://assets/chars/hero_soldier.glb")
 	body_mesh = hero_scene.instantiate()
-	var s := 0.75
+	var s := 0.95
 	body_mesh.scale = Vector3(s, s, s)
 	body_mesh.position.y = -0.85
-	body_mesh.rotation.y = PI
+	body_mesh.rotation.y = 0.0
 	add_child(body_mesh)
-	var hero_tex: Texture2D = load("res://assets/hero_tex.png")
-	var hero_mat := StandardMaterial3D.new()
-	hero_mat.albedo_texture = hero_tex
-	hero_mat.albedo_color = Color(1.0, 1.0, 1.0)
-	hero_mat.roughness = 0.85
-	for mi in _find_meshes(body_mesh):
-		mi.material_override = hero_mat
+	# Darker tactical tint: reads as Algerian gendarmerie rather than desert sand
+	AnimLib.prep_materials(body_mesh, Color(0.62, 0.66, 0.74))
 	anim = body_mesh.find_child("AnimationPlayer", true, false)
+	var skel: Skeleton3D = body_mesh.find_child("Skeleton3D", true, false)
 	if anim:
-		for an in ["Human Armature|Idle", "Human Armature|Walk", "Human Armature|Run"]:
+		for an in ["Idle", "Walk", "Run"]:
 			var a: Animation = anim.get_animation(an)
 			if a:
 				a.loop_mode = Animation.LOOP_LINEAR
-		anim.play("Human Armature|Idle")
+		if skel:
+			AnimLib.add_clip(anim, skel, "res://assets/chars/anim_za_death.glb", "Death", false)
+		anim.play("Idle")
+
+	# Soft fill light so the hero's back reads against the dark street
+	var fill := OmniLight3D.new()
+	fill.position = Vector3(0.6, 1.6, 1.4)
+	fill.light_color = Color(0.75, 0.82, 1.0)
+	fill.light_energy = 0.9
+	fill.omni_range = 3.2
+	fill.shadow_enabled = false
+	add_child(fill)
 
 	# Camera rig — over the right shoulder
 	cam_pivot = Node3D.new()
@@ -365,11 +372,11 @@ func _find_meshes(n: Node) -> Array:
 func _update_anim(speed_frac: float) -> void:
 	if anim == null:
 		return
-	var want := "Human Armature|Idle"
+	var want := "Idle"
 	if speed_frac > 0.65:
-		want = "Human Armature|Run"
+		want = "Run"
 	elif speed_frac > 0.05:
-		want = "Human Armature|Walk"
+		want = "Walk"
 	if anim.current_animation != want:
 		anim.play(want, 0.25)
 

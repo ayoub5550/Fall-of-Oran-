@@ -703,7 +703,7 @@ func _on_player_damaged() -> void:
 func _on_player_died() -> void:
 	state = GameState.DEAD
 	if player.anim:
-		player.anim.play("Human Armature|Death", 0.2)
+		player.anim.play("Death", 0.2)
 		await get_tree().create_timer(1.6).timeout
 	title_label.text = "لقد مت...\nYOU DIED"
 	subtitle_label.text = "المس الشاشة لإعادة المحاولة — Tap to retry"

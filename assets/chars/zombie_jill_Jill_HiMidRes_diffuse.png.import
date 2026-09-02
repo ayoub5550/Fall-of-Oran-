@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://mtp1j0dpm5co"
-path="res://.godot/imported/zombie_medic.png-8f6dda74d6c93ee5f1d72cafd1eabf38.ctex"
+uid="uid://c3bm6tccgamof"
+path="res://.godot/imported/zombie_jill_Jill_HiMidRes_diffuse.png-c3a54819803502503815d641bca9310d.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "7cefb74c67e50ed8e944b01b25440bd8"
 }
 
 [deps]
 
-source_file="res://assets/zombie_medic.png"
-dest_files=["res://.godot/imported/zombie_medic.png-8f6dda74d6c93ee5f1d72cafd1eabf38.ctex"]
+source_file="res://assets/chars/zombie_jill_Jill_HiMidRes_diffuse.png"
+dest_files=["res://.godot/imported/zombie_jill_Jill_HiMidRes_diffuse.png-c3a54819803502503815d641bca9310d.ctex"]
 
 [params]
 
@@ -21,7 +24,7 @@ compress/lossy_quality=0.7
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

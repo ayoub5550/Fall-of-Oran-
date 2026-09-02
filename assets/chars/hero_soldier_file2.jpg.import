@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://yyv8ae80e5f7"
-path="res://.godot/imported/hero_tex.png-eb1caa3d3f0d64ae6edd7235cd9139a8.ctex"
+uid="uid://bcrleyvqlu778"
+path="res://.godot/imported/hero_soldier_file2.jpg-4f0d89de7789cae991b52b3b2d5cc528.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "097baeaf099c995525c80dfb8d29603d"
 }
 
 [deps]
 
-source_file="res://assets/hero_tex.png"
-dest_files=["res://.godot/imported/hero_tex.png-eb1caa3d3f0d64ae6edd7235cd9139a8.ctex"]
+source_file="res://assets/chars/hero_soldier_file2.jpg"
+dest_files=["res://.godot/imported/hero_soldier_file2.jpg-4f0d89de7789cae991b52b3b2d5cc528.ctex"]
 
 [params]
 
@@ -21,7 +24,7 @@ compress/lossy_quality=0.7
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

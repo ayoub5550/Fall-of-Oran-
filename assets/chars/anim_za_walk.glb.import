@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://k8xldy0vdxsk"
-path="res://.godot/imported/hero.glb-60b1dda00ac356d0d41e9d312bcd657c.scn"
+uid="uid://03qwbnvp85al"
+path="res://.godot/imported/anim_za_walk.glb-9dcb644e25016d6e1d0d0506c5770490.scn"
 
 [deps]
 
-source_file="res://assets/hero.glb"
-dest_files=["res://.godot/imported/hero.glb-60b1dda00ac356d0d41e9d312bcd657c.scn"]
+source_file="res://assets/chars/anim_za_walk.glb"
+dest_files=["res://.godot/imported/anim_za_walk.glb-9dcb644e25016d6e1d0d0506c5770490.scn"]
 
 [params]
 

@@ -51,41 +51,34 @@ func _ready() -> void:
 	add_child(die_sound)
 
 func _build_body() -> void:
-	model = load("res://assets/zombie.glb").instantiate()
-	var s := 0.62 * _rng.randf_range(0.9, 1.12)
+	# Realistic Mixamo zombie characters (see AGENT.md §7d). Two bodies, shared Mixamo rig.
+	var girl := _rng.randf() < 0.55
+	model = load("res://assets/chars/zombie_girl.glb" if girl else "res://assets/chars/zombie_jill.glb").instantiate()
+	var s := (0.85 if girl else 0.98) * _rng.randf_range(0.94, 1.06)
 	model.scale = Vector3(s, s, s)
 	model.position.y = -0.85
 	model.rotation.y = PI
 	add_child(model)
-	var outfits := [
-		"res://assets/zombie_worker.png",   # عامل ميناء بسترة برتقالية
-		"res://assets/zombie_cop.png",      # شرطي
-		"res://assets/zombie_civilian.png", # مدني
-		"res://assets/zombie_medic.png",    # ممرض مستشفى
-	]
-	var tex: Texture2D = load(outfits[_rng.randi() % outfits.size()])
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.roughness = 1.0
-	# Per-zombie decay tint
-	var tints := [Color(0.95, 1.0, 0.92), Color(0.85, 0.88, 0.85), Color(1.0, 0.95, 0.9), Color(0.8, 0.85, 0.88)]
-	mat.albedo_color = tints[_rng.randi() % tints.size()]
-	for mi in _find_meshes(model):
-		mi.material_override = mat
+	# Per-zombie decay tint (materials are duplicated per instance by AnimLib)
+	var tints := [Color(0.95, 1.0, 0.92), Color(0.82, 0.86, 0.84), Color(1.0, 0.93, 0.88), Color(0.78, 0.84, 0.88), Color(0.9, 0.9, 0.9)]
+	AnimLib.prep_materials(model, tints[_rng.randi() % tints.size()])
 	anim = model.find_child("AnimationPlayer", true, false)
-	if anim:
-		for an in ["Zombie|ZombieIdle", "Zombie|ZombieWalk", "Zombie|ZombieRun", "Zombie|ZombieCrawl"]:
-			var a: Animation = anim.get_animation(an)
-			if a:
-				a.loop_mode = Animation.LOOP_LINEAR
-		anim.play("Zombie|ZombieCrawl" if crawler else "Zombie|ZombieWalk")
+	var skel: Skeleton3D = model.find_child("Skeleton3D", true, false)
+	if anim and skel:
+		AnimLib.add_clip(anim, skel, "res://assets/chars/anim_z_idle.glb", "idle", true)
+		AnimLib.add_clip(anim, skel, "res://assets/chars/anim_za_walk.glb" if girl else "res://assets/chars/anim_z_walk.glb", "walk", true)
+		AnimLib.add_clip(anim, skel, "res://assets/chars/anim_z_run.glb", "run", true)
+		AnimLib.add_clip(anim, skel, "res://assets/chars/anim_za_attack.glb", "bite", true)
+		AnimLib.add_clip(anim, skel, "res://assets/chars/anim_za_death.glb", "death", false)
+		anim.play("walk")
+		anim.seek(_rng.randf_range(0.0, 1.0), true)
 		anim.speed_scale = _rng.randf_range(0.85, 1.15)
 	# faint red eye glow
 	var eye := OmniLight3D.new()
 	eye.position = Vector3(0, 0.75, -0.2)
 	eye.light_color = Color(0.9, 0.1, 0.08)
-	eye.light_energy = 0.35
-	eye.omni_range = 1.2
+	eye.light_energy = 0.1
+	eye.omni_range = 0.9
 	add_child(eye)
 
 func _find_meshes(n: Node) -> Array:
@@ -115,15 +108,14 @@ func _die() -> void:
 	_spawn_blood_pool()
 	set_collision_layer_value(1, false)
 	set_collision_mask_value(1, false)
-	if anim:
-		anim.stop()
-	# Fall backward and sink into the ground
+	if anim and anim.has_animation("death"):
+		anim.speed_scale = 1.0
+		anim.play("death", 0.15)
+	# After the death animation, sink into the ground and free
 	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(model, "rotation:x", -PI * 0.5, 0.6).set_ease(Tween.EASE_IN)
-	tw.tween_property(model, "position:y", -1.1, 0.6).set_delay(0.4)
-	tw.chain().tween_property(model, "position:y", -2.6, 2.0).set_delay(1.2)
-	tw.chain().tween_callback(queue_free)
+	tw.tween_interval(3.2)
+	tw.tween_property(model, "position:y", -2.6, 2.0)
+	tw.tween_callback(queue_free)
 
 func _spawn_blood_pool() -> void:
 	# Fresh blood pool that spreads under the corpse (v1.2 realism pass)
@@ -174,7 +166,7 @@ func _physics_process(delta: float) -> void:
 	elif dist > DETECT_RANGE * 2.0:
 		chasing = false
 
-	var speed := CHASE_SPEED * (0.55 if crawler else 1.0)
+	var speed := CHASE_SPEED * (0.8 if crawler else 1.0)  # "crawler" flag now = slow shambler
 	var move := Vector3.ZERO
 	if chasing:
 		move = to_player.normalized() * speed
@@ -204,11 +196,9 @@ func _physics_process(delta: float) -> void:
 
 	# Animation state
 	if anim:
-		var want := "Zombie|ZombieRun" if chasing else "Zombie|ZombieWalk"
-		if crawler:
-			want = "Zombie|ZombieCrawl"
-		if dist <= ATTACK_RANGE + 0.3 and chasing and not crawler:
-			want = "Zombie|ZombieBite"
+		var want := "run" if chasing else "walk"
+		if dist <= ATTACK_RANGE + 0.3 and chasing:
+			want = "bite"
 		if anim.current_animation != want:
 			anim.play(want, 0.3)
 
