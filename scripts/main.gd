@@ -54,14 +54,22 @@ func _ready() -> void:
 # ------------------------------------------------------------
 func _build_environment() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.008, 0.01, 0.02)
+	# v1.3: real night sky — moon, clouds, Santa Cruz fort on the hill, port cranes
+	env.background_mode = Environment.BG_SKY
+	var sky := Sky.new()
+	var sky_mat := PanoramaSkyMaterial.new()
+	sky_mat.panorama = load("res://assets/tex/sky_pano.jpg")
+	sky.sky_material = sky_mat
+	env.sky = sky
+	env.sky_rotation = Vector3(0, PI, 0) # moon + fort face down the street (-Z)
+	env.background_energy_multiplier = 1.12
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.10, 0.12, 0.18)
-	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color(0.11, 0.13, 0.20)
+	env.ambient_light_energy = 0.65
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.05, 0.06, 0.09)
-	env.fog_density = 0.035
+	env.fog_light_color = Color(0.055, 0.07, 0.11)
+	env.fog_density = 0.026
+	env.fog_sky_affect = 0.1
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true
 	env.glow_intensity = 0.65
@@ -75,10 +83,18 @@ func _build_environment() -> void:
 
 	moon = DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-35, 140, 0)
-	moon.light_color = Color(0.45, 0.55, 0.8)
-	moon.light_energy = 0.18
+	moon.light_color = Color(0.5, 0.6, 0.85)
+	moon.light_energy = 0.34
 	moon.shadow_enabled = true
 	add_child(moon)
+
+	# v1.3: baked reflections so wet asphalt/puddles mirror the actual street
+	var probe := ReflectionProbe.new()
+	probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	probe.size = Vector3(34, 24, STREET_LENGTH + 24)
+	probe.position = Vector3(0, 10, -STREET_LENGTH / 2.0)
+	probe.intensity = 0.8
+	add_child(probe)
 
 # ------------------------------------------------------------
 # The street: ground, buildings, lamps, cars, debris
@@ -264,6 +280,12 @@ func _build_street() -> void:
 		var s_side := -1.0 if i % 2 == 0 else 1.0
 		_prop(sign_files[i % sign_files.size()], Vector3(s_side * (STREET_WIDTH * 0.5 + 1.6), 0, sz), _rng.randf_range(60, 120) * s_side, 2.6)
 
+	# v1.3: palm trees along the sidewalks (Oran boulevard look)
+	for i in range(6):
+		var pz := -8.0 - i * 15.0
+		var p_side := 1.0 if i % 2 == 0 else -1.0
+		_palm(Vector3(p_side * (STREET_WIDTH * 0.5 + 2.3), 0, pz + _rng.randf_range(-2, 2)))
+
 	# Abandoned real 3D cars (Quaternius, CC0)
 	var car_files := ["NormalCar1", "NormalCar2", "SUV", "Taxi", "Cop"]
 	for i in range(9):
@@ -300,6 +322,65 @@ func _build_street() -> void:
 		var s := _rng.randf_range(0.3, 0.9)
 		_box(Vector3(s, s * 0.6, s), Vector3(_rng.randf_range(-6, 6), s * 0.3, _rng.randf_range(-STREET_LENGTH + 4, -4)), debris_mat)
 
+func _palm(pos: Vector3) -> void:
+	# Cheap procedural palm: bent trunk segments + textured frond quads
+	var palm := Node3D.new()
+	palm.position = pos
+	palm.rotation_degrees.y = _rng.randf_range(0, 360)
+	var h := _rng.randf_range(4.5, 6.0)
+	var lean := _rng.randf_range(-7.0, 7.0)
+	var trunk_mat := _mat(Color(0.16, 0.13, 0.10), 0.95)
+	var segs := 5
+	var top := Vector3.ZERO
+	for i in range(segs):
+		var seg := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		var f0 := float(i) / segs
+		var f1 := float(i + 1) / segs
+		cm.bottom_radius = 0.22 * (1.0 - f0 * 0.45)
+		cm.top_radius = 0.22 * (1.0 - f1 * 0.45)
+		cm.height = h / segs
+		cm.radial_segments = 6
+		seg.mesh = cm
+		seg.material_override = trunk_mat
+		var off := sin(f0 * 1.4) * lean * 0.06
+		seg.position = Vector3(off, h / segs * (i + 0.5), 0)
+		seg.rotation_degrees.z = lean * f1
+		palm.add_child(seg)
+		if i == segs - 1:
+			top = seg.position + Vector3(0, h / segs * 0.5, 0)
+	var frond_mat := StandardMaterial3D.new()
+	frond_mat.albedo_texture = load("res://assets/palm_frond.png")
+	frond_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	frond_mat.alpha_scissor_threshold = 0.4
+	frond_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	frond_mat.roughness = 0.9
+	for i in range(9):
+		# Pivot at crown; frond quad extends outward along +X and droops via Z rot.
+		var pivot := Node3D.new()
+		pivot.position = top
+		pivot.rotation_degrees = Vector3(0, i * 40.0 + _rng.randf_range(-14, 14), _rng.randf_range(-38, -14))
+		palm.add_child(pivot)
+		var fq := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		qm.size = Vector2(3.4, 1.5)
+		qm.center_offset = Vector3(1.55, 0.0, 0.0)
+		fq.mesh = qm
+		fq.material_override = frond_mat
+		fq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pivot.add_child(fq)
+	# Trunk collision
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var cs := CylinderShape3D.new()
+	cs.radius = 0.25
+	cs.height = h
+	col.shape = cs
+	col.position = Vector3(0, h * 0.5, 0)
+	body.add_child(col)
+	palm.add_child(body)
+	add_child(palm)
+
 func _prop(file: String, pos: Vector3, roty_deg: float, target_h: float) -> void:
 	# Place a decorative GLB prop, scaled so its height matches target_h, feet on ground.
 	var model: Node3D = load("res://assets/%s.glb" % file).instantiate()
@@ -320,11 +401,11 @@ func _build_exit_gate() -> void:
 	_box(Vector3(4.5, 0.2, 0.4), Vector3(0, 5.0, gz), _mat(Color(0.05, 0.05, 0.05)))
 	_box(Vector3(0.4, 5.0, 0.4), Vector3(-2.2, 2.5, gz), _mat(Color(0.05, 0.05, 0.05)))
 	_box(Vector3(0.4, 5.0, 0.4), Vector3(2.2, 2.5, gz), _mat(Color(0.05, 0.05, 0.05)))
-	_box(Vector3(3.8, 4.6, 0.15), Vector3(0, 2.3, gz), _mat(Color(0.02, 0.1, 0.03), 0.6, Color(0.1, 0.9, 0.25)), false)
+	_box(Vector3(3.8, 4.6, 0.15), Vector3(0, 2.3, gz), _mat(Color(0.03, 0.06, 0.04), 0.6, Color(0.05, 0.28, 0.10)), false)
 	var glow := OmniLight3D.new()
 	glow.position = Vector3(0, 2.5, gz + 1.5)
 	glow.light_color = Color(0.2, 1.0, 0.4)
-	glow.light_energy = 1.2
+	glow.light_energy = 0.7
 	glow.omni_range = 10.0
 	add_child(glow)
 
@@ -444,6 +525,9 @@ func _spawn_zombies() -> void:
 		Vector3(2, 1.2, -62), Vector3(-3.5, 1.2, -75), Vector3(0, 1.2, -82),
 		Vector3(4, 1.2, -45), Vector3(-4, 1.2, -68),
 		Vector3(1.5, 1.2, -28), Vector3(-1.0, 1.2, -58), Vector3(3.0, 1.2, -88),
+		# v1.3: distant horde silhouettes in the fog
+		Vector3(-2.5, 1.2, -70), Vector3(1.0, 1.2, -78), Vector3(-4.0, 1.2, -85),
+		Vector3(4.0, 1.2, -80), Vector3(0.5, 1.2, -86),
 	]
 	var idx := 0
 	for s in spots:
@@ -537,6 +621,26 @@ func _build_ui() -> void:
 	ch.position = Vector2(-2.5, -2.5)
 	ch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(ch)
+
+	# v1.3: animated film grain (adds texture to flat dark areas, RE-movie feel)
+	var grain := ColorRect.new()
+	grain.set_anchors_preset(Control.PRESET_FULL_RECT)
+	grain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gsh := Shader.new()
+	gsh.code = """
+shader_type canvas_item;
+render_mode blend_add;
+uniform float strength = 0.045;
+float rnd(vec2 co) { return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
+void fragment() {
+	float g = rnd(SCREEN_UV * (fract(TIME) * 37.0 + 1.7)) - 0.5;
+	COLOR = vec4(vec3(g * strength), 1.0);
+}
+"""
+	var gmat := ShaderMaterial.new()
+	gmat.shader = gsh
+	grain.material = gmat
+	ui.add_child(grain)
 
 	# Cinematic vignette
 	var vg := TextureRect.new()
@@ -672,7 +776,7 @@ func _lightning(delta: float) -> void:
 	tw.tween_property(moon, "light_energy", 2.4, 0.05)
 	tw.tween_property(moon, "light_energy", 0.4, 0.09)
 	tw.tween_property(moon, "light_energy", 1.7, 0.06)
-	tw.tween_property(moon, "light_energy", 0.18, 0.25)
+	tw.tween_property(moon, "light_energy", 0.34, 0.25)
 	var t := get_tree().create_timer(_rng.randf_range(0.5, 1.4))
 	t.timeout.connect(func() -> void:
 		var th := AudioStreamPlayer.new()

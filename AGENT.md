@@ -77,6 +77,16 @@ README_AR.md         # Arabic player-facing readme
 - Decals are plain `PlaneMesh` quads at staggered heights (0.02–0.05) — the `Decal` node is unreliable on the mobile renderer. Keep road plane at y=0.012, puddles ~0.022, blood ~0.03.
 - **Screenshot-test tip**: set `player.health = 1000000.0` before teleport-based captures, otherwise zombies kill the player mid-shoot.
 
+## 7c. v1.3 cinematic pass (sky + palms + beam)
+
+- **Night sky**: 2048×1024 equirect `assets/tex/sky_pano.jpg` via `PanoramaSkyMaterial` (`BG_SKY`, `background_energy_multiplier 1.12`). Generated with numpy/PIL (`temp/gen_sky.py` pattern): gradient sky, blurred-noise clouds, stars, smooth moon halo (**exponential falloff — never draw discrete alpha circles, they band into ugly rings in-game**), Santa Cruz hill + fort silhouette with lit windows, port cranes + ship, city-light horizon strip, sea moon-reflection, gaussian dither σ2.2 vs banding.
+- `env.sky_rotation = Vector3(0, PI, 0)` puts the moon down the street (−Z). Verify moon azimuth empirically with an 8-yaw screenshot scan; don't trust pano-x math.
+- **Palms**: procedural in `main.gd::_palm()` — 5 bent trunk cylinders + 9 frond quads. Frond texture runs **horizontally** (base left): each frond is a pivot Node3D at the crown with `rotation_degrees = (0, i*40±14, −38..−14)` (Z = droop) and a child QuadMesh 3.4×1.5 with `center_offset.x = 1.55`. Never rotate the quad Z=90 and translate +Y — that renders vertical dark planes.
+- **Flashlight beam**: fake volumetric — additive unshaded cone (CylinderMesh top 0.03 / bottom 1.7 / h 12, no caps, alpha 0.028, cull off) child of the SpotLight at z −6.4, rot X −90. Mobile renderer has **no volumetric fog / SSR / SDFGI** (verified via docs); SpotLight shadows, depth fog, ReflectionProbe, PanoramaSky all work.
+- **Film grain**: animated ColorRect canvas shader (blend_add, strength 0.045) under the vignette in `_build_ui`.
+- 16 zombies now (5 extra spawn spots at z −70..−86); logic tests expect 16.
+- Exit-gate green panel toned down (emissive 0.05,0.28,0.10, omni 0.7) — bright green looked arcade-y.
+
 ## 8. Roadmap ideas (not committed)
 
 - More districts of Oran (Sidi El Houari alleys, the port, Santa Cruz fort — see `concept_art/`).

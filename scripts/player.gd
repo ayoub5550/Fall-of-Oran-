@@ -88,12 +88,35 @@ func _ready() -> void:
 	# Flashlight mounted at shoulder
 	flashlight = SpotLight3D.new()
 	flashlight.position = Vector3(0.4, 0.1, 0.3)
-	flashlight.light_color = Color(1.0, 0.95, 0.85)
-	flashlight.light_energy = 5.0
-	flashlight.spot_range = 24.0
-	flashlight.spot_angle = 34.0
+	flashlight.light_color = Color(1.0, 0.93, 0.8)
+	flashlight.light_energy = 7.0
+	flashlight.spot_range = 30.0
+	flashlight.spot_angle = 30.0
+	flashlight.spot_angle_attenuation = 1.6
 	flashlight.shadow_enabled = true
 	cam_pivot.add_child(flashlight)
+
+	# v1.3: visible light beam (fake volumetric cone — mobile renderer has no volumetric fog)
+	var beam := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.03
+	cone.bottom_radius = 1.7
+	cone.height = 12.0
+	cone.radial_segments = 24
+	cone.cap_top = false
+	cone.cap_bottom = false
+	beam.mesh = cone
+	var bmat := StandardMaterial3D.new()
+	bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	bmat.albedo_color = Color(1.0, 0.92, 0.72, 0.028)
+	bmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam.material_override = bmat
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.rotation_degrees.x = -90.0
+	beam.position = Vector3(0, 0, -6.4)
+	flashlight.add_child(beam)
 
 	# Subtle character light so the hero reads against the dark
 	var rim := OmniLight3D.new()
