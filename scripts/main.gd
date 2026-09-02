@@ -32,6 +32,10 @@ const STREET_WIDTH := 12.0
 
 var _rng := RandomNumberGenerator.new()
 
+# Weather (v1.2 realism pass)
+var moon: DirectionalLight3D
+var _lightning_t := 7.0
+
 func _ready() -> void:
 	_rng.seed = 20260901
 	_build_environment()
@@ -42,6 +46,7 @@ func _ready() -> void:
 	_build_exit_gate()
 	_build_ui()
 	_start_ambience()
+	_build_weather()
 	_show_menu()
 
 # ------------------------------------------------------------
@@ -59,16 +64,16 @@ func _build_environment() -> void:
 	env.fog_density = 0.035
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.15
+	env.glow_intensity = 0.65
+	env.glow_bloom = 0.2
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 0.92
+	env.adjustment_contrast = 1.12
+	env.adjustment_saturation = 0.86
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
-	var moon := DirectionalLight3D.new()
+	moon = DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-35, 140, 0)
 	moon.light_color = Color(0.45, 0.55, 0.8)
 	moon.light_energy = 0.18
@@ -135,8 +140,60 @@ func _box(size: Vector3, pos: Vector3, mat: StandardMaterial3D, collide := true)
 	add_child(body)
 
 func _build_street() -> void:
-	var asphalt := _pbr("asphalt", 0.14, Color(0.5, 0.5, 0.55))
+	var asphalt := _pbr("asphalt", 0.14, Color(0.42, 0.42, 0.48))
+	asphalt.roughness = 0.55  # rain-slick
 	_box(Vector3(STREET_WIDTH + 24, 0.4, STREET_LENGTH + 30), Vector3(0, -0.2, -STREET_LENGTH * 0.5), asphalt)
+
+	# Marked road surface (real lane markings, wet sheen)
+	var road_mesh := PlaneMesh.new()
+	road_mesh.size = Vector2(STREET_WIDTH, STREET_LENGTH + 30)
+	var road_mat := StandardMaterial3D.new()
+	road_mat.albedo_texture = load("res://assets/tex/road_color.jpg")
+	road_mat.albedo_color = Color(0.62, 0.62, 0.68)
+	road_mat.roughness_texture = load("res://assets/tex/road_rough.jpg")
+	road_mat.roughness = 0.5
+	road_mat.normal_enabled = true
+	road_mat.normal_texture = load("res://assets/tex/road_normal.jpg")
+	road_mat.uv1_scale = Vector3(1.0, (STREET_LENGTH + 30.0) / 14.0, 1.0)
+	var road := MeshInstance3D.new()
+	road.mesh = road_mesh
+	road.material_override = road_mat
+	road.position = Vector3(0, 0.012, -STREET_LENGTH * 0.5)
+	add_child(road)
+
+	# Rain puddles (mirror-smooth, catch the lamp light)
+	var puddle_mat := StandardMaterial3D.new()
+	puddle_mat.albedo_texture = load("res://assets/puddle.png")
+	puddle_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	puddle_mat.metallic = 1.0
+	puddle_mat.roughness = 0.05
+	puddle_mat.metallic_specular = 0.9
+	for i in range(12):
+		var pm := PlaneMesh.new()
+		var ps := _rng.randf_range(1.6, 3.4)
+		pm.size = Vector2(ps, ps * _rng.randf_range(0.6, 1.0))
+		var pud := MeshInstance3D.new()
+		pud.mesh = pm
+		pud.material_override = puddle_mat
+		pud.position = Vector3(_rng.randf_range(-STREET_WIDTH * 0.45, STREET_WIDTH * 0.45), 0.022 + 0.004 * (i % 3), _rng.randf_range(-STREET_LENGTH + 4, -6))
+		pud.rotation.y = _rng.randf_range(0, TAU)
+		add_child(pud)
+
+	# Old blood stains on the asphalt
+	var blood_mat := StandardMaterial3D.new()
+	blood_mat.albedo_texture = load("res://assets/blood_decal.png")
+	blood_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	blood_mat.roughness = 0.3
+	for i in range(9):
+		var bm2 := PlaneMesh.new()
+		var bs := _rng.randf_range(0.9, 2.2)
+		bm2.size = Vector2(bs, bs)
+		var bl := MeshInstance3D.new()
+		bl.mesh = bm2
+		bl.material_override = blood_mat
+		bl.position = Vector3(_rng.randf_range(-5.5, 5.5), 0.03 + 0.003 * (i % 3), _rng.randf_range(-STREET_LENGTH + 4, -5))
+		bl.rotation.y = _rng.randf_range(0, TAU)
+		add_child(bl)
 
 	# Sidewalks
 	var walk := _pbr("paving", 0.35, Color(0.55, 0.52, 0.5))
@@ -155,19 +212,24 @@ func _build_street() -> void:
 			var c: Color = wall_colors[_rng.randi() % wall_colors.size()]
 			var bmat: StandardMaterial3D
 			var r := _rng.randf()
-			if r < 0.5:
+			if r < 0.7:
+				# Colonial facade with shuttered windows; some windows lit from inside
+				var fname := "facade_a" if _rng.randf() < 0.55 else "facade_b"
+				bmat = StandardMaterial3D.new()
+				bmat.albedo_texture = load("res://assets/tex/%s_color.jpg" % fname)
+				bmat.albedo_color = Color(0.28, 0.26, 0.25)
+				bmat.roughness = 0.85
+				bmat.emission_enabled = true
+				bmat.emission_texture = load("res://assets/tex/%s_emis.jpg" % fname)
+				bmat.emission_energy_multiplier = 1.1
+				bmat.uv1_triplanar = true
+				bmat.uv1_scale = Vector3(1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0)
+				bmat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			elif r < 0.85:
 				bmat = _pbr("plaster", 0.22, c * 1.6)
-			elif r < 0.8:
-				bmat = _pbr("concrete", 0.2, c * 2.0)
 			else:
 				bmat = _pbr("bricks", 0.28, Color(0.6, 0.45, 0.4))
 			_box(Vector3(d, h, w), Vector3(bx, h * 0.5, -z), bmat)
-			# A few dim windows
-			for i in range(_rng.randi_range(1, 3)):
-				var wy := _rng.randf_range(2.5, h - 1.0)
-				var wz := -z + _rng.randf_range(-w * 0.35, w * 0.35)
-				var glow := Color(0.35, 0.28, 0.12) if _rng.randf() < 0.7 else Color(0.1, 0.25, 0.12)
-				_box(Vector3(0.1, 1.0, 0.7), Vector3(bx - side * (d * 0.5 + 0.06), wy, wz), _mat(Color.BLACK, 0.5, glow), false)
 		z += _rng.randf_range(7.0, 11.0)
 
 	# End walls so player cannot leave
@@ -563,6 +625,64 @@ func _input(event: InputEvent) -> void:
 			get_tree().reload_current_scene()
 
 # ------------------------------------------------------------
+# Weather: rain, wet air, lightning (v1.2 realism pass)
+# ------------------------------------------------------------
+func _build_weather() -> void:
+	if player == null:
+		return
+	# Rain streaks following the player
+	var rain := GPUParticles3D.new()
+	rain.amount = 650
+	rain.lifetime = 0.75
+	rain.preprocess = 0.75
+	rain.visibility_aabb = AABB(Vector3(-22, -12, -22), Vector3(44, 24, 44))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(17, 0.5, 17)
+	pm.gravity = Vector3(0, -46, 0)
+	pm.initial_velocity_min = 6.0
+	pm.initial_velocity_max = 9.0
+	pm.direction = Vector3(0.12, -1, 0)
+	rain.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.018, 0.42)
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.albedo_color = Color(0.65, 0.75, 0.95, 0.28)
+	rm.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	quad.material = rm
+	rain.draw_pass_1 = quad
+	rain.position = Vector3(0, 8.5, 0)
+	player.add_child(rain)
+	# Rain sound loop
+	var rs := AudioStreamPlayer.new()
+	rs.stream = load("res://audio/rain.wav")
+	rs.volume_db = -14.0
+	rs.autoplay = true
+	add_child(rs)
+	rs.finished.connect(rs.play)
+
+func _lightning(delta: float) -> void:
+	_lightning_t -= delta
+	if _lightning_t > 0.0 or moon == null:
+		return
+	_lightning_t = _rng.randf_range(9.0, 22.0)
+	var tw := create_tween()
+	tw.tween_property(moon, "light_energy", 2.4, 0.05)
+	tw.tween_property(moon, "light_energy", 0.4, 0.09)
+	tw.tween_property(moon, "light_energy", 1.7, 0.06)
+	tw.tween_property(moon, "light_energy", 0.18, 0.25)
+	var t := get_tree().create_timer(_rng.randf_range(0.5, 1.4))
+	t.timeout.connect(func() -> void:
+		var th := AudioStreamPlayer.new()
+		th.stream = load("res://audio/thunder.wav")
+		th.volume_db = -7.0
+		add_child(th)
+		th.play()
+		th.finished.connect(th.queue_free))
+
+# ------------------------------------------------------------
 # Ambience + lamp flicker
 # ------------------------------------------------------------
 func _start_ambience() -> void:
@@ -574,6 +694,7 @@ func _start_ambience() -> void:
 	amb.finished.connect(amb.play)
 
 func _process(_delta: float) -> void:
+	_lightning(_delta)
 	if damage_flash and damage_flash.color.a > 0.0:
 		damage_flash.color.a = maxf(0.0, damage_flash.color.a - _delta * 1.2)
 	if player and ammo_label:

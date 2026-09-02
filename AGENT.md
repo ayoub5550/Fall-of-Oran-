@@ -68,6 +68,15 @@ README_AR.md         # Arabic player-facing readme
 5. Keep every repo file < 100 MB (GitHub hard limit); the whole assets dir is fine as-is.
 6. The owner writes **Arabic** — reply and document player-facing text in Arabic.
 
+## 7b. v1.2 realism pass (weather + facades)
+
+- **Colonial facades**: procedural 512px tiles (2 floors × 2 shuttered windows ≈ 6×6 m) generated with numpy — `assets/tex/facade_{a,b}_color.jpg` + matching `_emis.jpg` emission maps (warm lit windows). Applied triplanar with `uv1_scale = 1/6`; ~70% of buildings use them, `emission_energy_multiplier 1.1`. ambientCG has **no** old-town facades (all modern glass) — that's why these are procedural.
+- **Road**: ambientCG `Road007` (lane markings) on a `PlaneMesh` strip over the asphalt, `uv1_scale.y = length/14`, roughness ~0.5 for rain-slick look. Puddle quads: `metallic 1.0, roughness 0.05`, alpha texture `assets/puddle.png`.
+- **Weather**: `_build_weather()` in main.gd — GPUParticles3D rain (650 quads, gravity −46, `BILLBOARD_FIXED_Y`, visibility AABB ±22 m) **parented to the player**; looping `audio/rain.wav`; `_lightning(delta)` in `_process` flashes the `moon` DirectionalLight then plays `audio/thunder.wav` after 0.5–1.4 s. Rain/thunder WAVs are numpy-generated.
+- **Blood**: `assets/blood_decal.png` (RGBA splat) — static stains on the road + `zombie.gd::_spawn_blood_pool()` spreads a pool under each corpse (tween scale 0.15→1.0 over 2.2 s, added to zombie's parent so it survives `queue_free`).
+- Decals are plain `PlaneMesh` quads at staggered heights (0.02–0.05) — the `Decal` node is unreliable on the mobile renderer. Keep road plane at y=0.012, puddles ~0.022, blood ~0.03.
+- **Screenshot-test tip**: set `player.health = 1000000.0` before teleport-based captures, otherwise zombies kill the player mid-shoot.
+
 ## 8. Roadmap ideas (not committed)
 
 - More districts of Oran (Sidi El Houari alleys, the port, Santa Cruz fort — see `concept_art/`).

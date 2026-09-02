@@ -112,6 +112,7 @@ func _die() -> void:
 	dying = true
 	killed.emit()
 	die_sound.play()
+	_spawn_blood_pool()
 	set_collision_layer_value(1, false)
 	set_collision_mask_value(1, false)
 	if anim:
@@ -123,6 +124,27 @@ func _die() -> void:
 	tw.tween_property(model, "position:y", -1.1, 0.6).set_delay(0.4)
 	tw.chain().tween_property(model, "position:y", -2.6, 2.0).set_delay(1.2)
 	tw.chain().tween_callback(queue_free)
+
+func _spawn_blood_pool() -> void:
+	# Fresh blood pool that spreads under the corpse (v1.2 realism pass)
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1.7, 1.7)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load("res://assets/blood_decal.png")
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.roughness = 0.15
+	var pool := MeshInstance3D.new()
+	pool.mesh = pm
+	pool.material_override = mat
+	var parent := get_parent()
+	if parent == null:
+		return
+	parent.add_child(pool)
+	pool.global_position = Vector3(global_position.x, 0.045, global_position.z)
+	pool.rotation.y = randf() * TAU
+	pool.scale = Vector3(0.15, 1.0, 0.15)
+	var tw := pool.create_tween()
+	tw.tween_property(pool, "scale", Vector3(1.0, 1.0, 1.0), 2.2).set_ease(Tween.EASE_OUT)
 
 func _physics_process(delta: float) -> void:
 	if dying:
