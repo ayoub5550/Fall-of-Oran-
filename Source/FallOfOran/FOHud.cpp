@@ -127,6 +127,16 @@ void SFOHud::Construct(const FArguments& InArgs)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 0, 0, 12.f)[ SAssignNew(AmmoText, STextBlock).Font(Font(30)).ColorAndOpacity(GSand).ShadowOffset(FVector2D(1, 1)) ]
+				// sprint toggle (touch had no way to sprint before v2.1; keyboard Shift still works)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 0, 0, 12.f)
+				[
+					SNew(SBox).WidthOverride(150.f).HeightOverride(56.f)
+					[
+						SNew(SButton).ButtonColorAndOpacity(this, &SFOHud::SprintColor).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.OnPressed_Lambda([this]() { if (GM.IsValid()) if (AFOCharacter* P = GM->Player()) P->bSprinting = !P->bSprinting; })
+						[ SNew(STextBlock).Text(LOCTEXT("Sprint", "ركض")).Font(Font(20)).ColorAndOpacity(GSand) ]
+					]
+				]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 0, 0, 12.f)
 				[
 					SNew(SBox).Visibility(this, &SFOHud::InteractVis).WidthOverride(150.f).HeightOverride(64.f)
@@ -180,6 +190,11 @@ void SFOHud::Construct(const FArguments& InArgs)
 }
 
 FSlateColor SFOHud::FlashColor() const { return FlashCol; }
+FSlateColor SFOHud::SprintColor() const
+{
+	const AFOCharacter* P = GM.IsValid() ? GM->Player() : nullptr;
+	return (P && P->bSprinting) ? FLinearColor(0.75f, 0.55f, 0.1f, 0.85f) : FLinearColor(0.1f, 0.1f, 0.12f, 0.6f);
+}
 EVisibility SFOHud::OverlayVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::Collapsed : EVisibility::Visible; }
 EVisibility SFOHud::HudVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::Visible : EVisibility::Collapsed; }
 EVisibility SFOHud::HintVis() const { return (GM.IsValid() && !GM->Hint.IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
@@ -218,12 +233,13 @@ void SFOHud::Tick(const FGeometry& G, const double T, const float Dt)
 		if (BrightText.IsValid()) BrightText->SetText(BT);
 		if (BrightText2.IsValid()) BrightText2->SetText(BT);
 	}
-	const float A = FMath::Clamp(GM->DamageFlash * 1.6f, 0.f, 0.45f);
-	FlashCol = P && GM->DamageFlash > 0.f ? FLinearColor(0.6f, 0.f, 0.f, A) : FLinearColor(0.f, 0.f, 0.f, 0.f);
+	if (P && GM->DamageFlash > 0.f)     FlashCol = FLinearColor(0.6f, 0.f, 0.f, FMath::Clamp(GM->DamageFlash * 1.6f, 0.f, 0.45f));
+	else if (P && GM->HealFlash > 0.f)  FlashCol = FLinearColor(0.1f, 0.5f, 0.15f, FMath::Clamp(GM->HealFlash * 1.2f, 0.f, 0.3f));
+	else                                FlashCol = FLinearColor(0.f, 0.f, 0.f, 0.f);
 	switch (GM->State)
 	{
 	case EFOState::Menu:
-		TitleText->SetText(LOCTEXT("Title", "وهران: السقوط"));
+		TitleText->SetText(LOCTEXT("Title", "سقوط وهران"));
 		SubtitleText->SetText(FText::FromString(L ? FString::Printf(TEXT("المستوى %d/%d: %s\n%s\nالمس الشاشة للبدء"), GM->GetLevelIndex() + 1, FFOLevelRegistry::Num(), *L->Title, *L->Intro) : FString(TEXT("المس الشاشة للبدء"))));
 		break;
 	case EFOState::Dead:

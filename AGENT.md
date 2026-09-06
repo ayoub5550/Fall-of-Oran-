@@ -8,7 +8,7 @@
 1. Read this file, then `docs/ARCHITECTURE.md` (code layers) and `docs/GDD_AR.md` (game design: rules, numbers, levels, roadmap — keep it in sync with the code in the same commit). Skim `Source/FallOfOran/Core/FOTypes.h` — every gameplay concept is a struct there.
 2. Build the editor target, run the headless smoke test, then package Android (§4). **Never ship an APK without §4.4 (pak check).**
 3. Content is *data-driven*: to add a level or puzzle you edit `Core/FOLevelRegistry.cpp`, not gameplay classes.
-4. Push every fix to `main` as soon as it compiles and the smoke test passes (owner's standing rule). Tag releases `vX.Y`.
+4. Push to `main` early and often — commit and push code changes as soon as they are written, **without waiting for a compile or smoke test** (owner's standing rule since 2026-09-06; the old "only push after it compiles" rule is retired). Mark unverified commits with a `[WIP]`/`untested` note in the message and verify/fix in follow-up commits. Tag releases `vX.Y` only after §4.2 + §4.4 pass.
 5. Phone truth beats sandbox truth: the owner tests on a real Android device; sandbox renders (CPU Vulkan) are only a sanity check.
 6. **Play-testing from the sandbox = Appetize.io.** You cannot run an emulator here (no KVM/GPU). To actually play the APK, **ask the owner for an Appetize.io API key** (appetize.io → account → API Token), then run `Tools/appetize_upload.sh <apk> "vX.Y"` and send him the play link (§4.5). Never commit or print the key.
 

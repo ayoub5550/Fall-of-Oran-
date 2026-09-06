@@ -114,9 +114,10 @@ USTRUCT()
 struct FFOLightingPreset
 {
 	GENERATED_BODY()
-	UPROPERTY() float MoonIntensity = 6.f;
+	/** Phones without eye adaptation render ~3x brighter than the sandbox: keep ≈2 / ≈1.2 (AGENT.md §6). */
+	UPROPERTY() float MoonIntensity = 2.f;
 	UPROPERTY() FLinearColor MoonColor = FLinearColor(0.6f, 0.7f, 0.92f);
-	UPROPERTY() float SkyLightIntensity = 4.5f;
+	UPROPERTY() float SkyLightIntensity = 1.2f;
 	UPROPERTY() float FogDensity = 0.014f;
 	UPROPERTY() FLinearColor FogColor = FLinearColor(0.05f, 0.07f, 0.12f);
 	UPROPERTY() bool bLightning = true;

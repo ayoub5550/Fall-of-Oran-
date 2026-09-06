@@ -241,7 +241,7 @@ void AFOCharacter::OnTouchEnd(ETouchIndex::Type Idx, FVector) { if ((int32)Idx =
 
 void AFOCharacter::PlayAnim(EFOAnim A, bool bLoop, float Speed)
 {
-	if (bAnimStarted && CurrentAnim == A && OneShotTimer <= 0.f && bLoop) return;
+	if (bAnimStarted && CurrentAnim == A && OneShotTimer <= 0.f && bLoop) { GetMesh()->SetPlayRate(Speed); return; } // same clip: only retune speed
 	UAnimSequence** S = Anims.Find(A);
 	if (!S || !*S) return;
 	bAnimStarted = true;

@@ -46,7 +46,8 @@ static TArray<FFOLevelDef> BuildCampaign()
 		L.Lighting.FogColor = FLinearColor(0.10f, 0.06f, 0.05f); L.Lighting.FogDensity = 0.016f;
 		L.Lighting.MoonColor = FLinearColor(0.7f, 0.62f, 0.55f);
 		FFOPuzzleDef P; P.Type = EFOPuzzleType::BreakerSequence; P.Id = TEXT("breakers");
-		P.Location = FVector(7300, -480, 0); P.Yaw = -90.f; // front (-X local) faces +Y = the street P.Size = 4; P.PenaltyZombies = 2;
+		P.Location = FVector(7300, -480, 0); P.Yaw = -90.f; // front (-X local) faces +Y = the street
+		P.Size = 4; P.PenaltyZombies = 2;
 		P.NoteLocations = { FVector(2600, 380, 60), FVector(5200, -420, 60) }; // two copies of the same hint
 		L.Puzzles.Add(P);
 		AddSupplies(L, { {3200, -300, 40}, {6400, 420, 40} },
@@ -66,9 +67,10 @@ static TArray<FFOLevelDef> BuildCampaign()
 		L.Intro = TEXT("آخر قارب. بوابة الحاويات مقفلة بشيفرة مكوّنة من 4 أرقام مبعثرة في الميناء.");
 		L.Seed = 3391; L.StreetLength = 10000.f; L.ZombieCount = 24; L.RunnerChance = 0.4f; L.ZombieHpMul = 1.2f;
 		L.Lighting.FogColor = FLinearColor(0.04f, 0.08f, 0.12f); L.Lighting.FogDensity = 0.02f;
-		L.Lighting.MoonIntensity = 5.f; L.Lighting.SkyLightIntensity = 5.f;
+		L.Lighting.MoonIntensity = 1.7f; L.Lighting.SkyLightIntensity = 1.4f; // harbour: dimmer moon, more sky bounce
 		FFOPuzzleDef P; P.Type = EFOPuzzleType::Keypad; P.Id = TEXT("gatecode");
-		P.Location = FVector(10000.f + 60.f, 330, 0); P.Yaw = 0.f; // front faces -X = the player approaching the gate P.Size = 4; P.Code = TEXT("3714"); P.PenaltyZombies = 3;
+		P.Location = FVector(10000.f + 60.f, 330, 0); P.Yaw = 0.f; // front faces -X = the player approaching the gate
+		P.Size = 4; P.Code = TEXT("3714"); P.PenaltyZombies = 3;
 		P.NoteLocations = { FVector(1900, -400, 60), FVector(4300, 420, 60), FVector(6500, -430, 60), FVector(8600, 380, 60) };
 		L.Puzzles.Add(P);
 		AddSupplies(L, { {2500, 300, 40}, {5500, -300, 40}, {8000, 200, 40} },

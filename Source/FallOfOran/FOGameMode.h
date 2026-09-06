@@ -67,6 +67,7 @@ public:
 	int32 Kills = 0;
 	float LevelTime = 0.f;
 	float DamageFlash = 0.f;
+	float HealFlash = 0.f;   // green screen flash on medkit pickup (was reusing the red damage flash)
 	FString Hint; float HintTimer = 0.f;
 	FString NoteText; float NoteTimer = 0.f;
 	FString Subtitle;

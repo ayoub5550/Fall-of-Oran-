@@ -48,7 +48,11 @@ protected:
 	UMaterialInstanceDynamic* MakeFlat(const FLinearColor& Tint, const FLinearColor& Emissive = FLinearColor::Black, float Rough = 0.7f);
 	UPointLightComponent* MakeLight(const FVector& RelLoc, const FLinearColor& Color, float Intensity, float Radius);
 
+	/** Tripod floodlight + hazard stripes in front of every puzzle (see .cpp). */
+	void BuildWorkLight();
+
 	UPROPERTY() FFOPuzzleDef Def;
+	UPROPERTY() UPointLightComponent* WorkLight = nullptr;
 	EFOPuzzleState State = EFOPuzzleState::Idle;
 	UPROPERTY() USceneComponent* Root = nullptr;
 	UPROPERTY() UMaterialInterface* FlatMaster = nullptr;

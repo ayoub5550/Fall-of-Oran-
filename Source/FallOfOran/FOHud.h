@@ -29,6 +29,7 @@ private:
 	TSharedRef<SWidget> HudButton(const FText& Label, int32 FontSize, float W, float H, const FLinearColor& Col, TFunction<void()> OnPress);
 	FSlateFontInfo Font(int32 Size) const;
 	FSlateColor FlashColor() const;
+	FSlateColor SprintColor() const;
 	EVisibility OverlayVis() const;
 	EVisibility HudVis() const;
 	EVisibility HintVis() const;

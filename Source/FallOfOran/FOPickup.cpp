@@ -68,7 +68,7 @@ void AFOPickup::OnOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveCompone
 	if (USoundBase* S = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/pickup.pickup"))) UGameplayStatics::PlaySound2D(this, S);
 	switch (Item)
 	{
-	case EFOItem::Health: P->AddHealth(HealAmount); GM->DamageFlash = 0.3f; break;
+	case EFOItem::Health: P->AddHealth(HealAmount); GM->HealFlash = 0.3f; break;
 	case EFOItem::Ammo: P->AddAmmo(AmmoAmount); break;
 	default: break;
 	}

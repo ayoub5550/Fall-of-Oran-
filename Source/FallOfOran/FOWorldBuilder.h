@@ -86,6 +86,7 @@ public:
 	UPROPERTY() UMaterialInterface* M_Decal = nullptr;
 	UPROPERTY() UMaterialInterface* M_Sky = nullptr;
 	UPROPERTY() UMaterialInstanceDynamic* BloodMat = nullptr;
+	UPROPERTY() TArray<UStaticMeshComponent*> GrowPools; // spreading blood pools (ticked), see SpawnBloodPool
 	UPROPERTY() TArray<UPointLightComponent*> Lamps;
 	TArray<float> LampFlicker;
 	UPROPERTY() ADirectionalLight* Moon = nullptr;

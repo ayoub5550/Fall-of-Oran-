@@ -423,8 +423,9 @@ void AFOWorldBuilder::BuildStreetFurniture()
 {
 	UMaterialInstanceDynamic* Iron = Flat(FLinearColor(0.04f, 0.04f, 0.045f), 0.5f, 0.7f);
 	UMaterialInstanceDynamic* LampGlass = Flat(FLinearColor(1.f, 0.7f, 0.35f), 0.3f, 0.f, FLinearColor(1.f, 0.62f, 0.25f) * 6.f);
-	// Sodium street lamps, alternating sides, every 22 m
-	for (int32 i = 0; i < 5; i++)
+	// Sodium street lamps, alternating sides, every 20 m, all the way to the exit gate.
+	// (v2.0 hard-coded 5 lamps: level 2 had one behind the exit wall and level 3's last 20 m were unlit.)
+	for (int32 i = 0; 900.f + i * 2000.f < StreetLength - 300.f; i++)
 	{
 		const float X = 900.f + i * 2000.f;
 		const int32 Side = (i % 2 == 0) ? 1 : -1;
@@ -438,8 +439,8 @@ void AFOWorldBuilder::BuildStreetFurniture()
 		Lamps.Add(L);
 		LampFlicker.Add(Rng.FRand() < 0.5f ? Rng.FRandRange(0.5f, 1.f) : 0.f);
 	}
-	// Hanging cables across the street (three-segment sag)
-	for (int32 i = 0; i < 6; i++)
+	// Hanging cables across the street (three-segment sag), all the way down the street
+	for (int32 i = 0; 700.f + i * 1450.f < StreetLength - 500.f; i++)
 	{
 		const float X = 700.f + i * 1450.f + Rng.FRandRange(-200.f, 200.f);
 		const float Z0 = Rng.FRandRange(640.f, 820.f), Sag = Rng.FRandRange(60.f, 120.f);
@@ -452,7 +453,7 @@ void AFOWorldBuilder::BuildStreetFurniture()
 		}
 	}
 	// Palms along the sidewalks (Oran boulevard look)
-	for (int32 i = 0; i < 6; i++)
+	for (int32 i = 0; 800.f + i * 1500.f < StreetLength - 600.f; i++)
 	{
 		const int32 Side = (i % 2 == 0) ? 1 : -1;
 		BuildPalm(FVector(800.f + i * 1500.f + Rng.FRandRange(-200.f, 200.f), Side * (StreetWidth * 0.5f + 230.f), 24.f));
@@ -461,7 +462,7 @@ void AFOWorldBuilder::BuildStreetFurniture()
 	Prop(TEXT("/Game/Props/TrafficLight.TrafficLight"), FVector(1400.f, -(StreetWidth * 0.5f + 120.f), 24.f), 0.f, 460.f);
 	Prop(TEXT("/Game/Props/TrafficLight_2.TrafficLight_2"), FVector(5800.f, StreetWidth * 0.5f + 120.f, 24.f), 180.f, 460.f);
 	const TCHAR* Signs[3] = { TEXT("/Game/Props/Sign_Stop.Sign_Stop"), TEXT("/Game/Props/Sign_NoParking.Sign_NoParking"), TEXT("/Game/Props/Sign_Triangle.Sign_Triangle") };
-	for (int32 i = 0; i < 6; i++)
+	for (int32 i = 0; 1000.f + i * 1300.f < StreetLength - 600.f; i++)
 	{
 		const int32 Side = (i % 2 == 0) ? -1 : 1;
 		Prop(Signs[i % 3], FVector(1000.f + i * 1300.f, Side * (StreetWidth * 0.5f + 160.f), 24.f), Rng.FRandRange(-30.f, 30.f) + (Side > 0 ? 180.f : 0.f), 260.f);
@@ -537,7 +538,7 @@ void AFOWorldBuilder::BuildDebris()
 		Place(C, FTransform(FRotator(0, 0, Rng.FRand() < 0.3f ? 90.f : 0.f), FVector(Rng.FRandRange(800.f, StreetLength - 600.f), Rng.FRandRange(-500.f, 500.f), 24.f), FVector(0.45f, 0.45f, 0.7f)));
 	}
 	// Army checkpoint: sandbag wall + concrete barriers halfway down the street
-	const float Cx = 4600.f;
+	const float Cx = FMath::RoundToFloat(StreetLength * 0.5f); // halfway, whatever the level length
 	for (int32 r = 0; r < 3; r++)
 		for (int32 c = 0; c < 7 - r; c++)
 		{
@@ -657,7 +658,7 @@ void AFOWorldBuilder::SpawnBloodPool(const FVector& Loc)
 	UStaticMeshComponent* Q = Quad(FVector(Loc.X, Loc.Y, 4.5f + 0.1f * (BloodCount % 5)), FVector2D(170.f, 170.f), BloodMat, FRotator(0, Rng.FRandRange(0, 360.f), 0));
 	Q->SetMobility(EComponentMobility::Movable);
 	Q->SetWorldScale3D(FVector(0.2f, 0.2f, 1.f));
-	Q->ComponentTags.Add(TEXT("GrowPool"));
+	GrowPools.Add(Q);
 }
 
 void AFOWorldBuilder::SpawnBloodSplat(const FVector& Loc, const FVector& Normal)
@@ -671,14 +672,15 @@ void AFOWorldBuilder::SpawnBloodSplat(const FVector& Loc, const FVector& Normal)
 void AFOWorldBuilder::Tick(float Dt)
 {
 	Super::Tick(Dt);
-	// Blood pools spread
-	for (UActorComponent* C : GetComponents())
-		if (UStaticMeshComponent* S = Cast<UStaticMeshComponent>(C))
-			if (S->ComponentHasTag(TEXT("GrowPool")))
-			{
-				FVector Sc = S->GetComponentScale();
-				if (Sc.X < 1.7f) S->SetWorldScale3D(FVector(Sc.X + Dt * 0.5f, Sc.Y + Dt * 0.5f, 1.f));
-			}
+	// Blood pools spread (own list: scanning the ~3000 world components every frame was a phone CPU hog)
+	for (int32 i = GrowPools.Num() - 1; i >= 0; i--)
+	{
+		UStaticMeshComponent* S = GrowPools[i];
+		if (!S) { GrowPools.RemoveAtSwap(i); continue; }
+		const FVector Sc = S->GetComponentScale();
+		if (Sc.X < 1.7f) S->SetWorldScale3D(FVector(Sc.X + Dt * 0.5f, Sc.Y + Dt * 0.5f, 1.f));
+		else GrowPools.RemoveAtSwap(i); // fully spread, stop ticking it
+	}
 	// Lamp flicker
 	const float T = GetWorld()->GetTimeSeconds();
 	for (int32 i = 0; i < Lamps.Num(); i++)
@@ -700,8 +702,9 @@ void AFOWorldBuilder::Tick(float Dt)
 	}
 	else if (Moon && Moon->GetLightComponent()->Intensity > BaseMoon * Bright + 0.01f)
 	{
-		Moon->GetLightComponent()->SetIntensity(FMath::Max(BaseMoon * Bright, Moon->GetLightComponent()->Intensity - Dt * 40.f));
-		if (Moon->GetLightComponent()->Intensity <= BaseMoon * Bright + 0.05f) Moon->GetLightComponent()->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
+		Moon->GetLightComponent()->SetIntensity(FMath::Max(BaseMoon * Bright, Moon->GetLightComponent()->Intensity - Dt * BaseMoon * 7.f));
+		// restore the LEVEL's moon colour (v2.0 hard-coded the cold boulevard tint, so level 2's warm moon turned blue after the first flash)
+		if (Moon->GetLightComponent()->Intensity <= BaseMoon * Bright + 0.05f) Moon->GetLightComponent()->SetLightColor(LevelDef ? LevelDef->Lighting.MoonColor : FLinearColor(0.6f, 0.7f, 0.92f));
 	}
 	if (ThunderDelay >= 0.f)
 	{

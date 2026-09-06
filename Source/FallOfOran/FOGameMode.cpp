@@ -74,6 +74,7 @@ void AFOGameMode::Tick(float Dt)
 	Super::Tick(Dt);
 	if (State == EFOState::Playing) LevelTime += Dt;
 	if (DamageFlash > 0.f) DamageFlash -= Dt;
+	if (HealFlash > 0.f) HealFlash -= Dt;
 	if (HintTimer > 0.f) { HintTimer -= Dt; if (HintTimer <= 0.f) Hint.Empty(); }
 	if (NoteTimer > 0.f) { NoteTimer -= Dt; if (NoteTimer <= 0.f) NoteText.Empty(); }
 	if (RestartTimer > 0.f) RestartTimer -= Dt;
