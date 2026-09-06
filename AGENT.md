@@ -17,7 +17,7 @@
 |---|---|
 | Engine | Unreal Engine **5.8.2**, private fork `ayoub5550/UnrealEngine` (branch `release`), built from source |
 | Language | C++ only (no Blueprints, no UMG; HUD is Slate in code). Runtime-built Enhanced Input. |
-| Target | Android arm64, ES3.1 + Vulkan, minSdk 26, `com.ayoub5550.falloforan`, ASTC cook flavour |
+| Target | Android arm64, compatible Vulkan or **OpenGL ES 3.2+**, minSdk 26, `com.ayoub5550.falloforan`, ASTC cook flavour. `bBuildForES31` / ES3_1 are engine setting/shader names, not a promise of ES 3.1 device support. |
 | Map | `Content/Maps/Oran.umap` is an **empty** map; `AFOWorldBuilder` builds the whole level at BeginPlay from code |
 | Assets | Mixamo characters/animations (`Content/Chars`), CC0 props/textures (`Content/Props`, `Content/Textures`), OGG audio (`Content/Audio`), Noto Kufi Arabic font (`Content/Fonts`) |
 | Rendering work | Blender renders (cinematics/marketing) go to **SheepIt** (owner decision); the game itself renders on the player's phone |
@@ -110,7 +110,7 @@ UnrealPak -List /tmp/chk/FallOfOran/Content/Paks/FallOfOran-Android_ASTC.utoc | 
 Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot tour.
 
 ### 4.5 Play-test the APK in the browser (Appetize.io)
-There is no usable local emulator in the current sandbox (no `/dev/kvm`, no GPU, no root). The owner's **Appetize.io** API is accessible; actual compatibility with this APK still needs verification:
+There is no usable local emulator in the current sandbox (no `/dev/kvm`, no GPU, no root). The owner's **Appetize.io** API is accessible, but the v2.1 APK is **blocked before the menu** on the two Appetize devices tested on 2026-09-06: Pixel 6 / Android 13 and Pixel 9 Pro / Android 16. Both show the engine's OpenGL ES 3.2 requirement. This is not a claim about every Appetize device or a physical-phone verdict. See `docs/VALIDATION_V2_1.md`.
 1. Ask the owner in chat: «أحتاج مفتاح Appetize.io API (الحساب → API Token) لتجربة اللعبة». Store it in a file with mode 600 outside the repo (e.g. `/work/secrets/appetize_token.txt`). It is a secret: never commit, log, or echo it, and remind the owner to rotate it when the session is over.
 2. After §4.4 (pak check passed): `APPETIZE_TOKEN=$(cat /work/secrets/appetize_token.txt) Tools/appetize_upload.sh $OUT/Android_ASTC/FallOfOran-arm64.apk "v2.1 - short note"`
    The uploader requires `$OUT/verification/verification.json` and verifies the APK SHA-256 before any upload. Set `APPETIZE_VERIFICATION=<verification.json>` if the checker output is elsewhere. It never prints raw API responses/private keys and saves safe public metadata next to the verification report.
@@ -118,6 +118,8 @@ There is no usable local emulator in the current sandbox (no `/dev/kvm`, no GPU,
    The uploader enforces that bundle check for updates. On a network/follow-up error, inspect the saved app ID/account before retrying; do not blindly create another app.
 3. Open the returned play URL yourself for a smoke run (menu → level 1 → first puzzle). Report installation, launch, rendering, controls and any failure separately. Share the URL with its verified status; do not describe an uploaded but untested app as playable.
 4. Limits: the APK is arm64-only. Emulator architecture, ARM translation, Android version, graphics features and account entitlements can affect compatibility. Check the provider's current supported-device information and test the actual APK; neither API access nor a device name guarantees Unreal will run. Keep sessions short within the owner's plan and do not buy an upgrade without approval. Cloud-device FPS is not a real-phone performance benchmark; the owner's physical-device verdict still wins.
+5. On the tested account, the embedded JS SDK page was blocked by embed-plan and authenticated-debug requirements; the normal `appetize.io/app/<publicKey>` page did install and launch the app without those features. Do not buy an upgrade to bypass that workflow limitation or confuse it with the separate graphics failure. Normal-page landscape uses `orientation=landscape`; the JS SDK config names the orientation `horizontal`.
+6. **Do not remove the engine's graphics-capability guard to make a test appear to pass.** In this engine revision, `AndroidOpenGL.cpp::PlatformInitOpenGL` requires OpenGL ES 3.2 despite the `bBuildForES31` setting name. The observed dialog establishes that the app chose OpenGL and failed that check; it does not establish why Vulkan was unavailable. Obtain device logs or test a compatible GPU/device before changing rendering settings.
 Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from the sandbox: their signups need CAPTCHA/SMS/verified e-mail and all failed (2026-09).
 
 ## 5. Conventions
@@ -134,4 +136,4 @@ Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from t
 - **Overexposure on phone**: real devices render far brighter than the sandbox CPU driver. Keep `BaseMoon≈2`, `BaseSky≈1.2`; let the player scale (brightness buttons).
 - **T-pose**: load `UAnimSequence` in `BeginPlay`, never in constructors (CDO time). `PlayAnim` must not early-out before the first clip (`bAnimStarted`). Skeletal materials need `used_with_skeletal_mesh`.
 - Static components must be created before `RegisterComponent`. `-ExecCmds="quit"` doesn't quit a cooked game — kill the PID. Never run two editor instances at once.
-- Unreal Remote / live viewport streaming from the sandbox is impossible (no GPU, no inbound network); the feedback loop is APK → Appetize.io (§4.5, needs the owner's API key) → owner's phone video.
+- Unreal Remote / live viewport streaming from the sandbox is impossible (no GPU, no inbound network); try the checked APK on Appetize (§4.5, needs the owner's API key), but use the owner's compatible phone/video when the cloud device fails its graphics-capability check.
