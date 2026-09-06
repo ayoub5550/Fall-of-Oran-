@@ -84,7 +84,8 @@ PATH=/work/temp/fakebin:$PATH Engine/Build/BatchFiles/Linux/Build.sh FallOfOranE
 # Checks both process exit status and game log markers; never kills unrelated editor processes.
 UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/selftest.sh"
 UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/smoke_test.sh" 1
-# Self-test injects gameplay events / DebugSolve; it is NOT a touch-input or graphics test.
+# Self-test injects gameplay events / DebugSolve, tests the real exit overlap,
+# restarts the level once and verifies the old HUD was released. It is NOT a touch-input or graphics test.
 # Logs + summary.json: Saved/Automation/<timestamp>/. Override with --log-dir; cold-start timeout: --timeout 900.
 # 4.3 proof screenshots on CPU Vulkan (~4 min per frame; -vulkandebug is mandatory or it SIGSEGVs at LoadMap)
 LP_NUM_THREADS=1 UnrealEditor-Cmd $PROJ/FallOfOran.uproject -game -vulkan -AllowCPUDevices -featureleveles31 -RenderOffscreen -norhithread -vulkandebug -FOShots -FOShotMax=4 -FOLevel=1 -dpcvars=r.PSOPrecaching=0

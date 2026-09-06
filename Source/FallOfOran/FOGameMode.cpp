@@ -24,6 +24,14 @@
 #include "HAL/PlatformMisc.h"
 #include "Misc/Paths.h"
 
+namespace
+{
+	// Process-local regression state; weak ownership must not keep the old HUD
+	// alive across OpenLevel. Used only with -FOSelfTestRestart.
+	TWeakPtr<SFOHud> GSelfTestPreviousHud;
+	bool GSelfTestDidRestart = false;
+}
+
 AFOGameMode::AFOGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -243,9 +251,40 @@ void AFOGameMode::TickSelfTest(float Dt)
 {
 	SelfTestClock += Dt;
 	if (SelfTestClock < 1.f) return;
-	if (State == EFOState::Menu) { StartGame(); return; }
+	if (State == EFOState::Menu)
+	{
+		if (FParse::Param(FCommandLine::Get(), TEXT("FOSelfTestRestart")) && GSelfTestDidRestart)
+		{
+			if (GSelfTestPreviousHud.IsValid())
+			{
+				bSelfTest = false;
+				UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: previous HUD retained after restart"));
+				FPlatformMisc::RequestExitWithStatus(false, 1);
+				return;
+			}
+			UE_LOG(LogFO, Display, TEXT("SELFTEST HUD CLEANUP PASS: previous widget released"));
+		}
+		StartGame();
+		return;
+	}
 	if (State == EFOState::Won)
 	{
+		if (FParse::Param(FCommandLine::Get(), TEXT("FOSelfTestRestart")) && !GSelfTestDidRestart)
+		{
+			if (!Hud.IsValid())
+			{
+				bSelfTest = false;
+				UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: HUD not created; cannot check restart cleanup"));
+				FPlatformMisc::RequestExitWithStatus(false, 1);
+				return;
+			}
+			GSelfTestPreviousHud = Hud;
+			GSelfTestDidRestart = true;
+			bSelfTest = false;
+			UE_LOG(LogFO, Display, TEXT("SELFTEST RESTART: reloading completed level"));
+			Restart();
+			return;
+		}
 		bSelfTest = false;
 		UE_LOG(LogFO, Display, TEXT("SELFTEST PASS: level %d won, kills %d"), LevelIndex + 1, Kills);
 		FPlatformMisc::RequestExitWithStatus(false, 0);

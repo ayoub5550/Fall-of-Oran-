@@ -57,7 +57,7 @@ def run_level(binary, project, level, mode, output, timeout):
         "-forcelogflush", "-ddc=NoZenLocalFallback", f"-FOLevel={level}",
         f"-abslog={engine_log}", f"-UserDir={user_dir}",
     ]
-    args += ["-FOSelfTest"] if mode == "selftest" else ["-FOShots", "-FOShotMax=2"]
+    args += ["-FOSelfTest", "-FOSelfTestRestart"] if mode == "selftest" else ["-FOShots", "-FOShotMax=2"]
     env = dict(os.environ, LP_NUM_THREADS="1")
     started = time.monotonic()
     timed_out = False
@@ -88,7 +88,10 @@ def run_level(binary, project, level, mode, output, timeout):
     elif level == 2:
         required.append("Puzzle 'gatecode' spawned")
     if mode == "selftest":
-        required.append("SELFTEST EXIT OVERLAP:")
+        required += [
+            "SELFTEST EXIT OVERLAP:", "SELFTEST RESTART:",
+            "SELFTEST HUD CLEANUP PASS:",
+        ]
     missing = [marker for marker in required if marker not in text]
     errors = re.findall(
         r"^.*(?:SELFTEST FAIL|Fatal error:|Assertion failed:|Unhandled Exception|"
