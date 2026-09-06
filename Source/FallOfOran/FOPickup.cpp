@@ -1,6 +1,7 @@
 #include "FOPickup.h"
 #include "FOCharacter.h"
 #include "FOGameMode.h"
+#include "Components/FOHealthComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SphereComponent.h"
@@ -58,20 +59,38 @@ void AFOPickup::Tick(float Dt)
 	Mesh->SetRelativeLocation(FVector(0, 0, 6.f * FMath::Sin(T * 2.f)));
 	Mesh->AddRelativeRotation(FRotator(0, 40.f * Dt, 0));
 	Glow->SetIntensity(7.f + 3.f * FMath::Sin(T * 3.f));
+	// BeginOverlap can happen while in the menu or at full health. Re-check only
+	// nearby overlaps so the pickup remains usable without leaving/re-entering.
+	CollectCheckTimer -= Dt;
+	if (!bCollected && CollectCheckTimer <= 0.f)
+	{
+		CollectCheckTimer = 0.15f;
+		if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>())
+			if (GM->State == EFOState::Playing)
+				if (AFOCharacter* P = GM->Player())
+					if (Trigger->IsOverlappingActor(P)) TryCollect(P);
+	}
 }
 
 void AFOPickup::OnOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
-	AFOCharacter* P = Cast<AFOCharacter>(Other);
+	TryCollect(Cast<AFOCharacter>(Other));
+}
+
+void AFOPickup::TryCollect(AFOCharacter* P)
+{
 	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
-	if (!P || !GM || GM->State != EFOState::Playing) return;
-	if (USoundBase* S = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/pickup.pickup"))) UGameplayStatics::PlaySound2D(this, S);
+	if (bCollected || !P || P->IsDead() || !GM || GM->State != EFOState::Playing) return;
+	if (Item == EFOItem::Health && (!P->HealthComp || P->HealthComp->GetHealth() >= P->HealthComp->GetMax() || HealAmount <= 0.f)) return;
+	bCollected = true; // one reward even if multiple overlap notifications arrive
+	Trigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	switch (Item)
 	{
 	case EFOItem::Health: P->AddHealth(HealAmount); GM->HealFlash = 0.3f; break;
 	case EFOItem::Ammo: P->AddAmmo(AmmoAmount); break;
 	default: break;
 	}
+	if (USoundBase* S = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/pickup.pickup"))) UGameplayStatics::PlaySound2D(this, S);
 	GM->ReportEvent(FFOGameEvent(EFOGameEvent::ItemCollected, Tag));
 	Destroy();
 }

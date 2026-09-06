@@ -49,6 +49,8 @@ def run_level(binary, project, level, mode, output, timeout):
     engine_log = output / f"{mode}_L{level}.engine.log"
     user_dir = output / f"user_L{level}"
     user_dir.mkdir(parents=True, exist_ok=True)
+    # An early launch failure must not reuse PASS markers from a previous run.
+    engine_log.write_text("", encoding="utf-8")
     args = [
         str(binary), str(project), "-game", "-nullrhi", "-nosound",
         "-unattended", "-nop4", "-stdout", "-FullStdOutLogOutput",
@@ -85,6 +87,8 @@ def run_level(binary, project, level, mode, output, timeout):
         required.append("Puzzle 'breakers' spawned")
     elif level == 2:
         required.append("Puzzle 'gatecode' spawned")
+    if mode == "selftest":
+        required.append("SELFTEST EXIT OVERLAP:")
     missing = [marker for marker in required if marker not in text]
     errors = re.findall(
         r"^.*(?:SELFTEST FAIL|Fatal error:|Assertion failed:|Unhandled Exception|"

@@ -4,6 +4,7 @@
 #include "FOPickup.h"
 #include "FOCharacter.h"
 #include "FOGameMode.h"
+#include "Mission/FOMissionComponent.h"
 #include "Puzzles/FOBreakerPuzzle.h"
 #include "Puzzles/FOKeypadPuzzle.h"
 #include "Puzzles/FONote.h"
@@ -672,6 +673,14 @@ void AFOWorldBuilder::SpawnBloodSplat(const FVector& Loc, const FVector& Normal)
 void AFOWorldBuilder::Tick(float Dt)
 {
 	Super::Tick(Dt);
+	// A puzzle can unlock the exit while the player is already inside the box;
+	// BeginOverlap alone would require leaving and re-entering to finish.
+	if (ExitTrigger)
+		if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>())
+			if (GM->State == EFOState::Playing && GM->Mission && GM->Mission->IsExitOpen())
+				if (AFOCharacter* P = GM->Player())
+					if (ExitTrigger->IsOverlappingActor(P))
+						GM->ReportEvent(FFOGameEvent(EFOGameEvent::ExitReached));
 	// Blood pools spread (own list: scanning the ~3000 world components every frame was a phone CPU hog)
 	for (int32 i = GrowPools.Num() - 1; i >= 0; i--)
 	{
@@ -684,7 +693,7 @@ void AFOWorldBuilder::Tick(float Dt)
 	// Lamp flicker
 	const float T = GetWorld()->GetTimeSeconds();
 	for (int32 i = 0; i < Lamps.Num(); i++)
-		if (LampFlicker[i] > 0.f)
+		if (IsValid(Lamps[i]) && LampFlicker.IsValidIndex(i) && LampFlicker[i] > 0.f)
 		{
 			const float N = FMath::PerlinNoise1D(T * 6.f + i * 13.7f);
 			const float F = N > 0.55f * LampFlicker[i] ? 0.15f : 1.f;

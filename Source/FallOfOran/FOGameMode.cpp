@@ -10,6 +10,7 @@
 #include "Puzzles/FOKeypadPuzzle.h"
 #include "Mission/FOObjective.h"
 #include "Components/FOHealthComponent.h"
+#include "Components/BoxComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
@@ -69,6 +70,17 @@ void AFOGameMode::BeginPlay()
 	if (bShotMode) GAreScreenMessagesEnabled = false;
 }
 
+void AFOGameMode::EndPlay(const EEndPlayReason::Type Reason)
+{
+	// The viewport survives OpenLevel. Leaving this shared widget attached stacks
+	// dead menu overlays after each retry/level change and darkens the next level.
+	if (Hud.IsValid() && GEngine && GEngine->GameViewport)
+		GEngine->GameViewport->RemoveViewportWidgetContent(Hud.ToSharedRef());
+	Hud.Reset();
+	CloseKeypad();
+	Super::EndPlay(Reason);
+}
+
 void AFOGameMode::Tick(float Dt)
 {
 	Super::Tick(Dt);
@@ -85,7 +97,14 @@ void AFOGameMode::Tick(float Dt)
 // ------------------------------------------------------------------ flow
 void AFOGameMode::StartGame()
 {
-	if (State == EFOState::Menu) { State = EFOState::Playing; if (!Level->Intro.IsEmpty()) SetHint(Level->Intro, 5.f); return; }
+	if (State == EFOState::Menu)
+	{
+		State = EFOState::Playing;
+		if (!Level->Intro.IsEmpty()) SetHint(Level->Intro, 5.f);
+		// Empty missions can complete during BeginPlay, before the player starts.
+		if (Mission && Mission->IsComplete()) Win();
+		return;
+	}
 	if (RestartTimer > 0.f) return;
 	if (State == EFOState::Dead) { Restart(); return; }
 	if (State == EFOState::Won)
@@ -225,18 +244,62 @@ void AFOGameMode::TickSelfTest(float Dt)
 	SelfTestClock += Dt;
 	if (SelfTestClock < 1.f) return;
 	if (State == EFOState::Menu) { StartGame(); return; }
-	if (State == EFOState::Won) { UE_LOG(LogFO, Display, TEXT("SELFTEST PASS: level %d won, kills %d"), LevelIndex + 1, Kills); FPlatformMisc::RequestExit(false); return; }
-	if (State != EFOState::Playing || SelfTestClock > 30.f) { UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: state %d after %.0fs, stage %d"), (int32)State, SelfTestClock, Mission->StageIndex()); FPlatformMisc::RequestExit(false); return; }
+	if (State == EFOState::Won)
+	{
+		bSelfTest = false;
+		UE_LOG(LogFO, Display, TEXT("SELFTEST PASS: level %d won, kills %d"), LevelIndex + 1, Kills);
+		FPlatformMisc::RequestExitWithStatus(false, 0);
+		return;
+	}
+	if (State != EFOState::Playing || SelfTestClock > 30.f)
+	{
+		bSelfTest = false;
+		UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: state %d after %.0fs, stage %d"), (int32)State, SelfTestClock, Mission ? Mission->StageIndex() : -1);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
 	// Drive one step per tick: satisfy every active objective of the current stage.
-	const int32 StageBefore = Mission->StageIndex();
+	const int32 StageBefore = Mission ? Mission->StageIndex() : -1;
+	if (!Level || !Level->Stages.IsValidIndex(StageBefore))
+	{
+		bSelfTest = false;
+		UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: invalid mission stage %d"), StageBefore);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
 	for (const FFOObjectiveDef& O : Level->Stages[StageBefore].Objectives)
 	{
 		switch (O.Type)
 		{
 		case EFOObjectiveType::Collect: for (int32 i = 0; i < O.Count; i++) ReportEvent(FFOGameEvent(EFOGameEvent::ItemCollected, O.Tag)); break;
 		case EFOObjectiveType::Kill:    for (int32 i = 0; i < O.Count; i++) ReportEvent(FFOGameEvent(EFOGameEvent::ZombieKilled)); break;
-		case EFOObjectiveType::Reach:   ReportEvent(FFOGameEvent(EFOGameEvent::ExitReached)); break;
+		case EFOObjectiveType::Reach:
+			// Exercise the actual overlap path, not a synthetic ExitReached event.
+			if (World && World->ExitTrigger && Player())
+			{
+				if (!bSelfTestExitPrepared)
+				{
+					bSelfTestExitPrepared = true;
+					Player()->SetActorLocation(World->ExitTrigger->GetComponentLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+					UE_LOG(LogFO, Display, TEXT("SELFTEST EXIT OVERLAP: entered open exit"));
+				}
+			}
+			else
+			{
+				bSelfTest = false;
+				UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: player or exit trigger missing"));
+				FPlatformMisc::RequestExitWithStatus(false, 1);
+			}
+			break;
 		case EFOObjectiveType::SolvePuzzle:
+			// Regression: solving the gate while already inside its trigger must win
+			// without requiring the player to step out and re-enter the volume.
+			if (!bSelfTestExitPrepared && World && World->ExitTrigger && Player())
+			{
+				bSelfTestExitPrepared = true;
+				Player()->SetActorLocation(World->ExitTrigger->GetComponentLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+				UE_LOG(LogFO, Display, TEXT("SELFTEST EXIT OVERLAP: entered locked exit before puzzle"));
+			}
 			for (TActorIterator<AFOPuzzleBase> It(GetWorld()); It; ++It) if (It->GetId() == O.Tag) It->DebugSolve();
 			break;
 		}

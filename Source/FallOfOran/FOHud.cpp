@@ -11,6 +11,7 @@
 #include "Widgets/Images/SImage.h"
 #include "Styling/CoreStyle.h"
 #include "Engine/Font.h"
+#include "Fonts/CompositeFont.h"
 #include "Misc/Paths.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -22,7 +23,13 @@ FSlateFontInfo SFOHud::Font(int32 Size) const
 	// Slate shapes Arabic via HarfBuzz. Falls back to the engine font if the file is missing.
 	static const FString Ttf = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Fonts/FOKufi.ttf"));
 	static const bool bHave = FPaths::FileExists(Ttf);
-	if (bHave) { return FSlateFontInfo(Ttf, Size); }
+	if (bHave)
+	{
+		// Match the former lazy-loaded font, using UE 5.8's supported composite API.
+		static const TSharedPtr<const FCompositeFont> ArabicFont =
+			MakeShared<FStandaloneCompositeFont>(NAME_None, Ttf, EFontHinting::Default, EFontLoadingPolicy::LazyLoad);
+		return FSlateFontInfo(ArabicFont, Size);
+	}
 	return FCoreStyle::GetDefaultFontStyle("Bold", Size);
 }
 
@@ -195,7 +202,7 @@ FSlateColor SFOHud::SprintColor() const
 	const AFOCharacter* P = GM.IsValid() ? GM->Player() : nullptr;
 	return (P && P->bSprinting) ? FLinearColor(0.75f, 0.55f, 0.1f, 0.85f) : FLinearColor(0.1f, 0.1f, 0.12f, 0.6f);
 }
-EVisibility SFOHud::OverlayVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::Collapsed : EVisibility::Visible; }
+EVisibility SFOHud::OverlayVis() const { return (GM.IsValid() && GM->State != EFOState::Playing) ? EVisibility::Visible : EVisibility::Collapsed; }
 EVisibility SFOHud::HudVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::Visible : EVisibility::Collapsed; }
 EVisibility SFOHud::HintVis() const { return (GM.IsValid() && !GM->Hint.IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::NoteVis() const { return (GM.IsValid() && !GM->NoteText.IsEmpty() && !GM->IsKeypadOpen()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
@@ -203,9 +210,10 @@ EVisibility SFOHud::KeypadVis() const { return (GM.IsValid() && GM->IsKeypadOpen
 EVisibility SFOHud::MenuOnlyVis() const { return (GM.IsValid() && GM->State == EFOState::Menu) ? EVisibility::Visible : EVisibility::Collapsed; }
 EVisibility SFOHud::InteractVis() const
 {
-	if (!GM.IsValid() || GM->IsKeypadOpen()) return EVisibility::Collapsed;
+	// Reserve the slot so the sprint button above it never jumps under a finger.
+	if (!GM.IsValid() || GM->IsKeypadOpen()) return EVisibility::Hidden;
 	const AFOCharacter* P = GM->Player();
-	return (P && P->HasInteractTarget()) ? EVisibility::Visible : EVisibility::Collapsed;
+	return (P && P->HasInteractTarget()) ? EVisibility::Visible : EVisibility::Hidden;
 }
 
 void SFOHud::Tick(const FGeometry& G, const double T, const float Dt)

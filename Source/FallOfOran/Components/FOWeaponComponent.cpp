@@ -1,4 +1,5 @@
 #include "Components/FOWeaponComponent.h"
+#include "FOCharacter.h"
 #include "FOZombie.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"

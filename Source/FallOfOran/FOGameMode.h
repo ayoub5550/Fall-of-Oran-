@@ -26,6 +26,7 @@ class AFOGameMode : public AGameModeBase
 public:
 	AFOGameMode();
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void Tick(float Dt) override;
 
 	// ---- flow
@@ -82,6 +83,7 @@ public:
 	bool bShotMode = false;
 	// Logic self-test (-FOSelfTest): drives the mission with synthetic events and puzzle DebugSolve(); logs SELFTEST PASS/FAIL and exits.
 	bool bSelfTest = false;
+	bool bSelfTestExitPrepared = false;
 	float SelfTestClock = 0.f;
 	void TickSelfTest(float Dt);
 	float ShotClock = 0.f;

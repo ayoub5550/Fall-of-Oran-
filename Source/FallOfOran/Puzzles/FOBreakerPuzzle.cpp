@@ -25,6 +25,8 @@ void AFOBreakerPuzzle::Setup(const FFOPuzzleDef& InDef, const FRandomStream& Rng
 	StatusPanel = MakeBox(FVector(-18.f, 0, 235.f), FVector(6.f, 60.f, 20.f), FLinearColor(0.3f, 0.02f, 0.02f), FLinearColor(1.f, 0.05f, 0.05f) * 2.f, false);
 	StatusLight = MakeLight(FVector(-60.f, 0, 235.f), FLinearColor(1, 0.1f, 0.1f), 20.f, 500.f);
 	// Warning sign texture if present
+	// Keep indices stable even if spawning one component actor fails.
+	Switches.SetNumZeroed(N);
 	for (int32 i = 0; i < N; i++)
 	{
 		const FVector Loc = GetActorTransform().TransformPosition(FVector(-24.f, -W * 0.5f + 50.f + i * 70.f, 120.f));
@@ -38,7 +40,7 @@ void AFOBreakerPuzzle::Setup(const FFOPuzzleDef& InDef, const FRandomStream& Rng
 		S->Lamp->SetLightColor(Color(i));
 		S->Lamp->SetRelativeLocation(FVector(-250.f, 0, 0));
 		S->OnUse = [this, i](AFOCharacter*) { Press(i); };
-		Switches.Add(S);
+		Switches[i] = S;
 	}
 }
 
@@ -51,11 +53,15 @@ FString AFOBreakerPuzzle::GetHintText(int32) const
 
 void AFOBreakerPuzzle::Press(int32 Index)
 {
-	if (IsSolved()) return;
+	if (IsSolved() || !Switches.IsValidIndex(Index) || !IsValid(Switches[Index])) return;
 	if (ClickSound) UGameplayStatics::PlaySound2D(this, ClickSound);
 	if (Order.IsValidIndex(Progress) && Order[Progress] == Index)
 	{
-		if (AFOPuzzlePart* S = Switches[Index]) { S->Mat->SetVectorParameterValue(TEXT("Emissive"), Color(Index) * 3.f); S->Lamp->SetIntensity(15.f); }
+		if (AFOPuzzlePart* S = Switches[Index])
+		{
+			if (S->Mat) S->Mat->SetVectorParameterValue(TEXT("Emissive"), Color(Index) * 3.f);
+			if (S->Lamp) S->Lamp->SetIntensity(15.f);
+		}
 		Progress++;
 		if (Progress >= Order.Num())
 		{
@@ -73,5 +79,9 @@ void AFOBreakerPuzzle::ResetSwitches()
 {
 	Progress = 0;
 	for (int32 i = 0; i < Switches.Num(); i++)
-		if (AFOPuzzlePart* S = Switches[i]) { S->Mat->SetVectorParameterValue(TEXT("Emissive"), Color(i) * 0.4f); S->Lamp->SetIntensity(0.f); }
+		if (AFOPuzzlePart* S = Switches[i])
+		{
+			if (S->Mat) S->Mat->SetVectorParameterValue(TEXT("Emissive"), Color(i) * 0.4f);
+			if (S->Lamp) S->Lamp->SetIntensity(0.f);
+		}
 }

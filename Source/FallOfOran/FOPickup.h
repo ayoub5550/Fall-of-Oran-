@@ -7,6 +7,7 @@
 class UStaticMeshComponent;
 class UPointLightComponent;
 class USphereComponent;
+class AFOCharacter;
 
 /** Glowing pickup: fuel can (objective item, reports ItemCollected(Tag)), medkit (+HealAmount), ammo box (+AmmoAmount). */
 UCLASS()
@@ -26,4 +27,9 @@ public:
 	UPROPERTY() USphereComponent* Trigger = nullptr;
 	float T = 0.f;
 	UFUNCTION() void OnOverlap(UPrimitiveComponent* Overlapped, AActor* Other, UPrimitiveComponent* OtherComp, int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep);
+
+private:
+	void TryCollect(AFOCharacter* Player);
+	bool bCollected = false;
+	float CollectCheckTimer = 0.f;
 };

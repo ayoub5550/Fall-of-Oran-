@@ -92,7 +92,11 @@ void AFOZombie::BeginPlay()
 
 void AFOZombie::PlayAnim(EZAnim A, bool bLoop, float Speed)
 {
-	if (CurrentAnim == A && bLoop && OneShotTimer <= 0.f) return;
+	if (CurrentAnim == A && bLoop && OneShotTimer <= 0.f)
+	{
+		GetMesh()->SetPlayRate(Speed);
+		return;
+	}
 	UAnimSequence** S = Anims.Find(A);
 	if (!S || !*S) return;
 	CurrentAnim = A;
