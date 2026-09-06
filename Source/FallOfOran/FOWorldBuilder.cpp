@@ -207,19 +207,19 @@ void AFOWorldBuilder::BuildLighting()
 	{
 		Moon->SetMobility(EComponentMobility::Movable);
 		UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Moon->GetLightComponent());
-		D->SetIntensity(6.0f);
+		D->SetIntensity(BaseMoon);
 		D->SetLightColor(FLinearColor(0.6f, 0.7f, 0.92f));
 		D->SetCastShadows(true);
 		D->SetDynamicShadowDistanceMovableLight(6000.f);
 		D->SetShadowAmount(0.85f);
 	}
-	ASkyLight* Sky = W->SpawnActor<ASkyLight>(FVector(0, 0, 1000.f), FRotator::ZeroRotator);
+	Sky = W->SpawnActor<ASkyLight>(FVector(0, 0, 1000.f), FRotator::ZeroRotator);
 	if (Sky)
 	{
 		USkyLightComponent* SC = Sky->GetLightComponent();
 		SC->SetMobility(EComponentMobility::Movable);
 		SC->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap; // no capture needed headless; falls back to color
-		SC->SetIntensity(4.5f);
+		SC->SetIntensity(BaseSky);
 		SC->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
 		SC->SetLowerHemisphereColor(FLinearColor(0.2f, 0.2f, 0.25f));
 	}
@@ -425,7 +425,7 @@ void AFOWorldBuilder::BuildStreetFurniture()
 		const FVector Head(X, Y - Side * 215.f, 730.f);
 		Box(Head, FVector(60.f, 30.f, 22.f), Iron, FRotator::ZeroRotator, false);
 		Box(Head - FVector(0, 0, 14.f), FVector(50.f, 22.f, 8.f), LampGlass, FRotator::ZeroRotator, false);
-		UPointLightComponent* L = Light(Head - FVector(0, 0, 40.f), FLinearColor(1.f, 0.66f, 0.3f), 320.f, 2200.f, true);
+		UPointLightComponent* L = Light(Head - FVector(0, 0, 40.f), FLinearColor(1.f, 0.66f, 0.3f), BaseLamp, 2200.f, true);
 		Lamps.Add(L);
 		LampFlicker.Add(Rng.FRand() < 0.5f ? Rng.FRandRange(0.5f, 1.f) : 0.f);
 	}
@@ -562,6 +562,15 @@ void AFOWorldBuilder::BuildExitGate()
 	Box(FVector(Gx + 60.f, 0, 600.f), FVector(60.f, 4000.f, 1200.f), Surface({ TEXT("concrete"), 200.f, FLinearColor(0.35f, 0.35f, 0.38f) }));
 }
 
+void AFOWorldBuilder::ApplyBrightness(float Mul)
+{
+	Bright = FMath::Clamp(Mul, 0.25f, 4.f);
+	if (Moon) Moon->GetLightComponent()->SetIntensity(BaseMoon * Bright);
+	if (Sky) Sky->GetLightComponent()->SetIntensity(BaseSky * Bright);
+	for (UPointLightComponent* L : Lamps) if (L) L->SetIntensity(BaseLamp * Bright);
+	UE_LOG(LogFO, Display, TEXT("Brightness x%.2f"), Bright);
+}
+
 void AFOWorldBuilder::OnExitOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	if (Cast<AFOCharacter>(Other))
@@ -643,21 +652,21 @@ void AFOWorldBuilder::Tick(float Dt)
 		{
 			const float N = FMath::PerlinNoise1D(T * 6.f + i * 13.7f);
 			const float F = N > 0.55f * LampFlicker[i] ? 0.15f : 1.f;
-			Lamps[i]->SetIntensity(320.f * F);
+			Lamps[i]->SetIntensity(BaseLamp * Bright * F);
 		}
 	// Lightning: flash the moon, thunder follows
 	LightningT -= Dt;
 	if (LightningT <= 0.f && Moon)
 	{
 		LightningT = Rng.FRandRange(9.f, 22.f);
-		Moon->GetLightComponent()->SetIntensity(28.f);
+		Moon->GetLightComponent()->SetIntensity(BaseMoon * Bright * 4.f);
 		Moon->GetLightComponent()->SetLightColor(FLinearColor(0.8f, 0.85f, 1.f));
 		ThunderDelay = Rng.FRandRange(0.5f, 1.4f);
 	}
-	else if (Moon && Moon->GetLightComponent()->Intensity > 0.45f)
+	else if (Moon && Moon->GetLightComponent()->Intensity > BaseMoon * Bright + 0.01f)
 	{
-		Moon->GetLightComponent()->SetIntensity(FMath::Max(6.0f, Moon->GetLightComponent()->Intensity - Dt * 40.f));
-		if (Moon->GetLightComponent()->Intensity <= 6.05f) Moon->GetLightComponent()->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
+		Moon->GetLightComponent()->SetIntensity(FMath::Max(BaseMoon * Bright, Moon->GetLightComponent()->Intensity - Dt * 40.f));
+		if (Moon->GetLightComponent()->Intensity <= BaseMoon * Bright + 0.05f) Moon->GetLightComponent()->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
 	}
 	if (ThunderDelay >= 0.f)
 	{

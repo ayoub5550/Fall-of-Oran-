@@ -30,6 +30,9 @@ public:
 	void Win();
 	void SpawnZombiesBehindPlayer(int32 Count);
 	void SetObjective(const FString& Text, float Seconds = 0.f);
+	/** Player-facing brightness control (persisted). Step is multiplicative, e.g. 1.25 or 0.8. */
+	void AdjustBrightness(float Step);
+	float CurrentBrightness() const;
 
 	EFOState State = EFOState::Menu;
 	int32 Kills = 0;
@@ -41,6 +44,7 @@ public:
 	FString DefaultObjective;
 	FString Subtitle;
 	TSharedPtr<SFOHud> Hud;
+	class AFOWorldBuilder* World = nullptr;
 	AFOCharacter* Player() const;
 	float RestartTimer = 0.f;
 

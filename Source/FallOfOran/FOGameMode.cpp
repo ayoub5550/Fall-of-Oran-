@@ -4,6 +4,7 @@
 #include "FOZombie.h"
 #include "FOWorldBuilder.h"
 #include "FOHud.h"
+#include "Core/FOGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -34,8 +35,12 @@ void AFOGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 	// Build the street procedurally, then the HUD.
-	AFOWorldBuilder* WB = GetWorld()->SpawnActor<AFOWorldBuilder>(AFOWorldBuilder::StaticClass(), FTransform::Identity);
-	if (WB) WB->BuildWorld();
+	World = GetWorld()->SpawnActor<AFOWorldBuilder>(AFOWorldBuilder::StaticClass(), FTransform::Identity);
+	if (World)
+	{
+		World->BuildWorld();
+		if (UFOGameInstance* GI = UFOGameInstance::Get(this)) World->ApplyBrightness(GI->Brightness());
+	}
 	if (GEngine && GEngine->GameViewport)
 	{
 		Hud = SNew(SFOHud).GameMode(this);
@@ -114,6 +119,15 @@ void AFOGameMode::SetObjective(const FString& Text, float Seconds)
 	Objective = Text;
 	HintTimer = Seconds;
 }
+
+void AFOGameMode::AdjustBrightness(float Step)
+{
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	const float B = FMath::Clamp((GI ? GI->Brightness() : 1.f) * Step, 0.25f, 4.f);
+	if (GI) GI->SetBrightness(B);
+	if (World) World->ApplyBrightness(B);
+}
+float AFOGameMode::CurrentBrightness() const { const UFOGameInstance* GI = UFOGameInstance::Get(this); return GI ? GI->Brightness() : 1.f; }
 
 void AFOGameMode::SpawnZombiesBehindPlayer(int32 Count)
 {

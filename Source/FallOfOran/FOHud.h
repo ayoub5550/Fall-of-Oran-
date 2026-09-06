@@ -21,6 +21,8 @@ public:
 private:
 	FReply HandleTap();
 	FReply OnFirePressed();
+	TSharedRef<SWidget> BrightnessBar(int32 FontSize);
+	TSharedPtr<STextBlock> BrightText, BrightText2;
 	TWeakObjectPtr<AFOGameMode> GM;
 	TSharedPtr<STextBlock> AmmoText, KillsText, FuelText, ObjectiveText, TitleText, SubtitleText;
 	TSharedPtr<SBox> HealthFill;

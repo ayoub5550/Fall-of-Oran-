@@ -85,6 +85,14 @@ public:
 	UPROPERTY() TArray<UPointLightComponent*> Lamps;
 	TArray<float> LampFlicker;
 	UPROPERTY() ADirectionalLight* Moon = nullptr;
+	UPROPERTY() class ASkyLight* Sky = nullptr;
+	// Light budget. Phones without eye adaptation render MUCH brighter than the sandbox CPU driver,
+	// so keep bases low and let the player scale them (ApplyBrightness, persisted in the save game).
+	float BaseMoon = 2.0f;
+	float BaseSky = 1.2f;
+	float BaseLamp = 320.f;
+	float Bright = 1.f;
+	void ApplyBrightness(float Mul);
 	float LightningT = 7.f;
 	float ThunderDelay = -1.f;
 	UPROPERTY() USoundBase* ThunderSound = nullptr;

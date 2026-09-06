@@ -65,6 +65,8 @@ void SFOHud::Construct(const FArguments& InArgs)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ SAssignNew(KillsText, STextBlock).Font(Font(22)).ColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.85f)).ShadowOffset(FVector2D(1, 1)) ]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ SAssignNew(FuelText, STextBlock).Font(Font(22)).ColorAndOpacity(FLinearColor(0.95f, 0.6f, 0.2f)).ShadowOffset(FVector2D(1, 1)) ]
 			]
+			// brightness (small, top-centre)
+			+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0.f, 14.f)[ BrightnessBar(18) ]
 			// crosshair
 			+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
 			[ SNew(SBox).WidthOverride(6.f).HeightOverride(6.f)[ SNew(SImage).Image(FCoreStyle::Get().GetBrush("WhiteBrush")).ColorAndOpacity(FLinearColor(1, 1, 1, 0.8f)) ] ]
@@ -92,10 +94,31 @@ void SFOHud::Construct(const FArguments& InArgs)
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 14.f)[ SAssignNew(TitleText, STextBlock).Font(Font(64)).ColorAndOpacity(Red).ShadowOffset(FVector2D(2, 2)) ]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ SAssignNew(SubtitleText, STextBlock).Font(Font(22)).ColorAndOpacity(Sand).AutoWrapText(true).Justification(ETextJustify::Center) ]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 28.f, 0, 0)[ BrightnessBar(24) ]
 			]
 		]
 	];
 	SetVisibility(EVisibility::Visible);
+}
+
+TSharedRef<SWidget> SFOHud::BrightnessBar(int32 FontSize)
+{
+	const FLinearColor Sand(0.95f, 0.85f, 0.65f);
+	TSharedPtr<STextBlock> Label;
+	auto Btn = [&](const FText& T, float Step) {
+		return SNew(SBox).WidthOverride(FontSize * 2.6f).HeightOverride(FontSize * 2.2f)
+		[
+			SNew(SButton).ButtonColorAndOpacity(FLinearColor(0.1f, 0.1f, 0.12f, 0.6f)).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			.OnPressed_Lambda([this, Step]() { if (GM.IsValid()) GM->AdjustBrightness(Step); })
+			[ SNew(STextBlock).Text(T).Font(Font(FontSize)).ColorAndOpacity(Sand) ]
+		];
+	};
+	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0)[ Btn(FText::FromString(TEXT("\u2212")), 0.8f) ]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0)[ SAssignNew(Label, STextBlock).Font(Font(FontSize)).ColorAndOpacity(Sand).ShadowOffset(FVector2D(1, 1)) ]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0)[ Btn(FText::FromString(TEXT("+")), 1.25f) ];
+	if (!BrightText.IsValid()) BrightText = Label; else BrightText2 = Label;
+	return Row;
 }
 
 FSlateColor SFOHud::FlashColor() const { return FlashCol; }
@@ -116,6 +139,11 @@ void SFOHud::Tick(const FGeometry& G, const double T, const float Dt)
 	KillsText->SetText(FText::FromString(FString::Printf(TEXT("قتلى %d"), GM->Kills)));
 	FuelText->SetText(FText::FromString(FString::Printf(TEXT("وقود %d/%d"), GM->Fuel, AFOGameMode::FuelNeeded)));
 	ObjectiveText->SetText(FText::FromString(GM->Objective));
+	{
+		const FText BT = FText::FromString(FString::Printf(TEXT("سطوع %d%%"), FMath::RoundToInt(GM->CurrentBrightness() * 100.f)));
+		if (BrightText.IsValid()) BrightText->SetText(BT);
+		if (BrightText2.IsValid()) BrightText2->SetText(BT);
+	}
 	const float A = FMath::Clamp(GM->DamageFlash * 1.6f, 0.f, 0.45f);
 	FlashCol = P && P->Health < 100.f && GM->DamageFlash > 0.f ? FLinearColor(0.6f, 0.f, 0.f, A) : FLinearColor(0.f, 0.f, 0.f, 0.f);
 	switch (GM->State)
