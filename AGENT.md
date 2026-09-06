@@ -66,6 +66,17 @@ lighting preset, `Items` (fuel/health/ammo/notes with street coordinates: X alon
 
 ## 4. Build, test, package (sandbox recipe — Linux, no root, no GPU)
 Engine at `/work/repos/unrealengine` (see `AI-AGENT-BUILD.md` there). Project at `/work/repos/fall-of-oran-ue5`.
+Keep sandbox UBT settings in `Engine/Saved/UnrealBuildTool/BuildConfiguration.xml`, not only in the home directory (which may disappear after an environment replacement):
+```xml
+<Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
+  <BuildConfiguration>
+    <bAllowUBAExecutor>false</bAllowUBAExecutor>
+    <MaxParallelActions>16</MaxParallelActions>
+  </BuildConfiguration>
+</Configuration>
+```
+Do not use the old `<ParallelExecutor><MaxProcessorCount>` block: this engine's schema rejects it.
+An absent exit marker does not prove the build is running: check the actual build process too. Resume interrupted builds incrementally, without cleaning existing artifacts.
 ```bash
 # 4.1 compile editor module (~1.5 min incremental)
 PATH=/work/temp/fakebin:$PATH Engine/Build/BatchFiles/Linux/Build.sh FallOfOranEditor Linux Development -project=$PROJ/FallOfOran.uproject
@@ -78,8 +89,11 @@ UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/smoke_test.sh" 1
 # 4.3 proof screenshots on CPU Vulkan (~4 min per frame; -vulkandebug is mandatory or it SIGSEGVs at LoadMap)
 LP_NUM_THREADS=1 UnrealEditor-Cmd $PROJ/FallOfOran.uproject -game -vulkan -AllowCPUDevices -featureleveles31 -RenderOffscreen -norhithread -vulkandebug -FOShots -FOShotMax=4 -FOLevel=1 -dpcvars=r.PSOPrecaching=0
 #     → Saved/Shots/shot00..03.png (menu, street, mid-street, first puzzle). Kill the process afterwards (it does not always exit).
-# 4.4 Android APK (~5 min incremental, ~40 min clean). JDK/SDK/NDK env as in Tools/package_android.sh
-RunUAT.sh BuildCookRun -project=$PROJ/FallOfOran.uproject -platform=Android -cookflavor=ASTC -clientconfig=Development -build -cook -stage -package -pak -archive -archivedirectory=$OUT -nop4 -utf8output -unattended -NoUBA -NoUBALocal -ddc=NoZenLocalFallback
+# 4.4 Android APK. Duration depends on the existing tool/engine/shader cache.
+# JDK/SDK/NDK defaults and overrides in Tools/package_android.sh; preserves UAT exit status.
+UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/package_android.sh" "$OUT"
+# Logs, PID and final exit status: Saved/Automation/Android-<timestamp>/.
+# Building UnrealEditor alone does not build ShaderCompileWorker or UnrealPak; UAT builds those tools as needed.
 #     THEN VERIFY THE PAK before sending anything to the owner:
 unzip -o $OUT/Android_ASTC/FallOfOran-arm64.apk assets/main.obb.png -d /tmp/chk && unzip -o /tmp/chk/assets/main.obb.png '*.utoc' -d /tmp/chk
 UnrealPak -List /tmp/chk/FallOfOran/Content/Paks/FallOfOran-Android_ASTC.utoc | grep -c 'Zombies\|Anims\|Props'   # must be > 0 (was 0 in v1.6)
