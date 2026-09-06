@@ -90,8 +90,11 @@ UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/smoke_test.sh" 1
 # 4.3 proof screenshots on CPU Vulkan (~4 min per frame; -vulkandebug is mandatory or it SIGSEGVs at LoadMap)
 LP_NUM_THREADS=1 UnrealEditor-Cmd $PROJ/FallOfOran.uproject -game -vulkan -AllowCPUDevices -featureleveles31 -RenderOffscreen -norhithread -vulkandebug -FOShots -FOShotMax=4 -FOLevel=1 -dpcvars=r.PSOPrecaching=0
 #     → Saved/Shots/shot00..03.png (menu, street, mid-street, first puzzle). Kill the process afterwards (it does not always exit).
+# Tooling unit tests (mock archives/processes; not real gameplay or APK validation):
+python3 -m unittest discover -s "$PROJ/Tools/tests" -v
 # 4.4 Android APK. Duration depends on the existing tool/engine/shader cache.
 # JDK/SDK/NDK defaults and overrides in Tools/package_android.sh; preserves UAT exit status.
+# Packaging shares the editor test lock and refuses to cook while another editor is running.
 UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/package_android.sh" "$OUT"
 # Logs, PID and final exit status: Saved/Automation/Android-<timestamp>/.
 # Building UnrealEditor alone does not build ShaderCompileWorker or UnrealPak; UAT builds those tools as needed.
