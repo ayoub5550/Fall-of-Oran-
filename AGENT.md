@@ -5,11 +5,12 @@
 > unless the owner asks. Everything below is what you need to work on the project autonomously.
 
 ## 0. TL;DR for a new agent
-1. Read this file, then `docs/ARCHITECTURE.md`. Skim `Source/FallOfOran/Core/FOTypes.h` — every gameplay concept is a struct there.
+1. Read this file, then `docs/ARCHITECTURE.md` (code layers) and `docs/GDD_AR.md` (game design: rules, numbers, levels, roadmap — keep it in sync with the code in the same commit). Skim `Source/FallOfOran/Core/FOTypes.h` — every gameplay concept is a struct there.
 2. Build the editor target, run the headless smoke test, then package Android (§4). **Never ship an APK without §4.4 (pak check).**
 3. Content is *data-driven*: to add a level or puzzle you edit `Core/FOLevelRegistry.cpp`, not gameplay classes.
 4. Push every fix to `main` as soon as it compiles and the smoke test passes (owner's standing rule). Tag releases `vX.Y`.
 5. Phone truth beats sandbox truth: the owner tests on a real Android device; sandbox renders (CPU Vulkan) are only a sanity check.
+6. **Play-testing from the sandbox = Appetize.io.** You cannot run an emulator here (no KVM/GPU). To actually play the APK, **ask the owner for an Appetize.io API key** (appetize.io → account → API Token), then run `Tools/appetize_upload.sh <apk> "vX.Y"` and send him the play link (§4.5). Never commit or print the key.
 
 ## 1. Project facts
 | | |
@@ -81,6 +82,15 @@ UnrealPak -List /tmp/chk/FallOfOran/Content/Paks/FallOfOran-Android_ASTC.utoc | 
 ```
 Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot tour.
 
+### 4.5 Play-test the APK in the browser (Appetize.io)
+Local emulators are impossible in the sandbox (no `/dev/kvm`, no GPU, no root). The working route is the owner's **Appetize.io** account:
+1. Ask the owner in chat: «أحتاج مفتاح Appetize.io API (الحساب → API Token) لتجربة اللعبة». Store it in a file with mode 600 outside the repo (e.g. `/work/secrets/appetize_token.txt`). It is a secret: never commit, log, or echo it, and remind the owner to rotate it when the session is over.
+2. After §4.4 (pak check passed): `APPETIZE_TOKEN=$(cat /work/secrets/appetize_token.txt) Tools/appetize_upload.sh $OUT/Android_ASTC/FallOfOran-arm64.apk "v2.1 - short note"`
+   → prints `publicKey` + play URL. Set `APPETIZE_APP_KEY=<publicKey>` on later uploads to update the same app instead of piling up new ones.
+3. Send the owner the play URL; open it yourself in the browser tool for a smoke run (menu → level 1 → first puzzle) and take screenshots for the report.
+4. Limits: Appetize Android devices are x86 emulators — our arm64 APK runs via ARM translation on Android 11+ (choose a Pixel / Galaxy, Android 12+), so expect low FPS; judge logic/UI, not performance. Free-tier minutes are capped — keep sessions short. Real-phone verdict from the owner still wins.
+Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from the sandbox: their signups need CAPTCHA/SMS/verified e-mail and all failed (2026-09).
+
 ## 5. Conventions
 - Prefix `FO`; one class per file; `Core/`, `Mission/`, `Components/`, `Puzzles/` subfolders; headers document *why*.
 - Gameplay code never talks to the mission directly: emit `FFOGameEvent` through `AFOGameMode::ReportEvent`.
@@ -95,4 +105,4 @@ Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot t
 - **Overexposure on phone**: real devices render far brighter than the sandbox CPU driver. Keep `BaseMoon≈2`, `BaseSky≈1.2`; let the player scale (brightness buttons).
 - **T-pose**: load `UAnimSequence` in `BeginPlay`, never in constructors (CDO time). `PlayAnim` must not early-out before the first clip (`bAnimStarted`). Skeletal materials need `used_with_skeletal_mesh`.
 - Static components must be created before `RegisterComponent`. `-ExecCmds="quit"` doesn't quit a cooked game — kill the PID. Never run two editor instances at once.
-- Unreal Remote / live viewport streaming from the sandbox is impossible (no GPU, no inbound network); the feedback loop is APK → owner's phone video.
+- Unreal Remote / live viewport streaming from the sandbox is impossible (no GPU, no inbound network); the feedback loop is APK → Appetize.io (§4.5, needs the owner's API key) → owner's phone video.
