@@ -98,6 +98,8 @@ python3 -m unittest discover -s "$PROJ/Tools/tests" -v
 UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/package_android.sh" "$OUT"
 # Logs, PID and final exit status: Saved/Automation/Android-<timestamp>/.
 # Building UnrealEditor alone does not build ShaderCompileWorker or UnrealPak; UAT builds those tools as needed.
+# A native Android Build.sh run may also produce an APK with NO cooked content.
+# Never distribute that code-only APK: complete BuildCookRun and verify the archived artifact below.
 #     THEN VERIFY THE PAK before sending anything to the owner:
 python3 "$PROJ/Tools/verify_android_apk.py" "$OUT/Android_ASTC/FallOfOran-arm64.apk" --output "$OUT/verification"
 # Checks ZIP/OBB integrity, package/version, arm64 native library, ALL project assets, and Arabic TTF.
