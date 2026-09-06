@@ -5,28 +5,28 @@
 #include "FOWorldBuilder.h"
 #include "FOHud.h"
 #include "Core/FOGameInstance.h"
+#include "Core/FOLevelRegistry.h"
+#include "Mission/FOMissionComponent.h"
+#include "Puzzles/FOKeypadPuzzle.h"
+#include "Mission/FOObjective.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
-#include "EngineUtils.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UnrealClient.h"
 #include "ShaderCompiler.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/Paths.h"
-#include "Engine/DirectionalLight.h"
-#include "Components/LightComponent.h"
-#include "Engine/PostProcessVolume.h"
 
 AFOGameMode::AFOGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = AFOCharacter::StaticClass();
-	DefaultObjective = TEXT("الهدف: اجمع 3 عبوات وقود لفتح بوابة الميناء");
-	Objective = DefaultObjective;
+	Mission = CreateDefaultSubobject<UFOMissionComponent>(TEXT("Mission"));
 }
 
 AFOCharacter* AFOGameMode::Player() const { return Cast<AFOCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)); }
@@ -34,13 +34,23 @@ AFOCharacter* AFOGameMode::Player() const { return Cast<AFOCharacter>(UGameplayS
 void AFOGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	// Build the street procedurally, then the HUD.
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	Level = GI ? GI->CurrentLevel() : FFOLevelRegistry::Get(0);
+	LevelIndex = GI ? GI->CurrentLevelIndex() : 0;
+	check(Level);
+	UE_LOG(LogFO, Display, TEXT("GameMode: level %d '%s'"), LevelIndex + 1, *Level->Title);
+
+	// World first (puzzles/notes need the mission to exist but not to be started), then mission, then HUD.
 	World = GetWorld()->SpawnActor<AFOWorldBuilder>(AFOWorldBuilder::StaticClass(), FTransform::Identity);
 	if (World)
 	{
-		World->BuildWorld();
-		if (UFOGameInstance* GI = UFOGameInstance::Get(this)) World->ApplyBrightness(GI->Brightness());
+		World->BuildWorld(*Level);
+		World->ApplyBrightness(GI ? GI->Brightness() : 1.f);
 	}
+	Mission->OnHint.AddLambda([this](const FString& T) { SetHint(T, 5.f); });
+	Mission->OnMissionComplete.AddLambda([this]() { Win(); });
+	Mission->Start(*Level);
+
 	if (GEngine && GEngine->GameViewport)
 	{
 		Hud = SNew(SFOHud).GameMode(this);
@@ -53,33 +63,83 @@ void AFOGameMode::BeginPlay()
 	}
 	State = EFOState::Menu;
 	bShotMode = FParse::Param(FCommandLine::Get(), TEXT("FOShots"));
+	bSelfTest = FParse::Param(FCommandLine::Get(), TEXT("FOSelfTest"));
+	{ int32 Skip = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotSkip="), Skip)) ShotIndex = Skip; } // -FOShotSkip=3 renders only the puzzle view
 	if (bShotMode) GAreScreenMessagesEnabled = false;
 }
 
 void AFOGameMode::Tick(float Dt)
 {
 	Super::Tick(Dt);
+	if (State == EFOState::Playing) LevelTime += Dt;
 	if (DamageFlash > 0.f) DamageFlash -= Dt;
-	if (HintTimer > 0.f) { HintTimer -= Dt; if (HintTimer <= 0.f) Objective = Fuel >= FuelNeeded ? TEXT("البوابة فُتحت! اهرب إلى الميناء") : DefaultObjective; }
-	if (RestartTimer > 0.f) { RestartTimer -= Dt; }
+	if (HintTimer > 0.f) { HintTimer -= Dt; if (HintTimer <= 0.f) Hint.Empty(); }
+	if (NoteTimer > 0.f) { NoteTimer -= Dt; if (NoteTimer <= 0.f) NoteText.Empty(); }
+	if (RestartTimer > 0.f) RestartTimer -= Dt;
 	if (bShotMode) TickShots(Dt);
+	if (bSelfTest) TickSelfTest(Dt);
 }
 
+// ------------------------------------------------------------------ flow
 void AFOGameMode::StartGame()
 {
-	if (State == EFOState::Menu) { State = EFOState::Playing; return; }
-	if ((State == EFOState::Dead || State == EFOState::Won) && RestartTimer <= 0.f) Restart();
+	if (State == EFOState::Menu) { State = EFOState::Playing; if (!Level->Intro.IsEmpty()) SetHint(Level->Intro, 5.f); return; }
+	if (RestartTimer > 0.f) return;
+	if (State == EFOState::Dead) { Restart(); return; }
+	if (State == EFOState::Won)
+	{
+		UFOGameInstance* GI = UFOGameInstance::Get(this);
+		if (GI && !bCampaignDone) GI->AdvanceToNextLevel();
+		else if (GI) GI->SelectLevel(0);
+		Restart();
+	}
 }
 
-void AFOGameMode::Restart()
+void AFOGameMode::Restart() { UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this))); }
+
+void AFOGameMode::SelectRelativeLevel(int32 Delta)
 {
-	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
+	if (State != EFOState::Menu) return;
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	if (!GI) return;
+	const int32 Want = LevelIndex + Delta;
+	if (!GI->IsUnlocked(Want)) { SetHint(TEXT("هذا المستوى مقفل — أنهِ المستوى السابق أولاً 🔒"), 3.f); return; }
+	GI->SelectLevel(Want);
+	Restart();
 }
 
-void AFOGameMode::OnZombieKilled(AFOCharacter* Killer)
+void AFOGameMode::Win()
 {
-	Kills++;
-	if (Killer) Killer->Kills++;
+	if (State != EFOState::Playing) return;
+	State = EFOState::Won;
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	if (GI) GI->OnLevelCompleted(LevelIndex, Kills, LevelTime);
+	bCampaignDone = LevelIndex + 1 >= FFOLevelRegistry::Num();
+	const int32 M = (int32)LevelTime / 60, S = (int32)LevelTime % 60;
+	Subtitle = FString::Printf(TEXT("%s\nالقتلى: %d — الوقت %d:%02d\n%s"), *Level->OutroText, Kills, M, S,
+		bCampaignDone ? TEXT("أنهيت الحملة كاملة! المس الشاشة للعودة إلى البداية") : TEXT("المس الشاشة للمستوى التالي"));
+	RestartTimer = 2.5f;
+}
+
+// ------------------------------------------------------------------ events
+void AFOGameMode::ReportEvent(const FFOGameEvent& E)
+{
+	if (State != EFOState::Playing) return;
+	switch (E.Type)
+	{
+	case EFOGameEvent::ZombieKilled:
+		Kills += E.Count;
+		if (AFOCharacter* P = Player()) P->Kills += E.Count;
+		break;
+	case EFOGameEvent::ItemCollected:
+		if (E.Tag == TEXT("fuel")) SpawnZombiesBehindPlayer(2); // the horde hears the can clatter
+		break;
+	case EFOGameEvent::ExitReached:
+		if (!Mission->IsExitOpen()) { SetHint(TEXT("البوابة مقفلة! أكمل الهدف الحالي أولاً 🔒"), 3.f); return; }
+		break;
+	default: break;
+	}
+	Mission->HandleEvent(E);
 }
 
 void AFOGameMode::OnPlayerDamaged() { DamageFlash = 0.35f; }
@@ -88,37 +148,24 @@ void AFOGameMode::OnPlayerDied()
 {
 	if (State != EFOState::Playing) return;
 	State = EFOState::Dead;
+	CloseKeypad();
 	Subtitle = FString::Printf(TEXT("قتلت %d زومبي — المس الشاشة للمحاولة من جديد"), Kills);
 	RestartTimer = 2.5f;
 }
 
-void AFOGameMode::OnFuelCollected()
+void AFOGameMode::OnPuzzleFailed(const FString& Message, int32 PenaltyZombies)
 {
-	Fuel++;
-	if (Fuel >= FuelNeeded) SetObjective(TEXT("البوابة فُتحت! اهرب إلى الميناء 🟢"));
-	else SetObjective(FString::Printf(TEXT("وقود %d/%d — ابحث عن البقية"), Fuel, FuelNeeded));
-	SpawnZombiesBehindPlayer(2); // the horde hears you
+	SetHint(Message, 4.f);
+	DamageFlash = 0.25f;
+	SpawnZombiesBehindPlayer(PenaltyZombies);
 }
 
-void AFOGameMode::OnExitReached()
-{
-	if (State != EFOState::Playing) return;
-	if (Fuel >= FuelNeeded) Win();
-	else SetObjective(FString::Printf(TEXT("البوابة مقفلة! تحتاج %d عبوات وقود أخرى ⛽"), FuelNeeded - Fuel), 4.f);
-}
+bool AFOGameMode::IsPuzzleActive(FName Id) const { return Mission && Mission->IsPuzzleActive(Id); }
 
-void AFOGameMode::Win()
-{
-	State = EFOState::Won;
-	Subtitle = FString::Printf(TEXT("نجوت من وهران. القتلى: %d — المس الشاشة للعب مجددًا"), Kills);
-	RestartTimer = 2.5f;
-}
-
-void AFOGameMode::SetObjective(const FString& Text, float Seconds)
-{
-	Objective = Text;
-	HintTimer = Seconds;
-}
+// ------------------------------------------------------------------ HUD helpers
+void AFOGameMode::SetHint(const FString& Text, float Seconds) { Hint = Text; HintTimer = Seconds; }
+void AFOGameMode::ShowNote(const FString& Text, float Seconds) { NoteText = Text; NoteTimer = Seconds; }
+FString AFOGameMode::GetObjectiveText() const { return Mission ? Mission->GetObjectiveText() : FString(); }
 
 void AFOGameMode::AdjustBrightness(float Step)
 {
@@ -129,87 +176,106 @@ void AFOGameMode::AdjustBrightness(float Step)
 }
 float AFOGameMode::CurrentBrightness() const { const UFOGameInstance* GI = UFOGameInstance::Get(this); return GI ? GI->Brightness() : 1.f; }
 
+// ------------------------------------------------------------------ keypad
+void AFOGameMode::OpenKeypad(AFOKeypadPuzzle* Pad) { ActiveKeypad = Pad; KeypadInput.Empty(); }
+void AFOGameMode::CloseKeypad() { ActiveKeypad = nullptr; KeypadInput.Empty(); }
+int32 AFOGameMode::KeypadLength() const { return ActiveKeypad ? ActiveKeypad->CodeLength() : 4; }
+void AFOGameMode::KeypadPress(TCHAR Digit)
+{
+	if (!ActiveKeypad || KeypadInput.Len() >= KeypadLength()) return;
+	KeypadInput.AppendChar(Digit);
+	if (KeypadInput.Len() >= KeypadLength()) KeypadSubmit();
+}
+void AFOGameMode::KeypadBackspace() { if (KeypadInput.Len() > 0) KeypadInput.LeftChopInline(1); }
+void AFOGameMode::KeypadSubmit()
+{
+	if (!ActiveKeypad) return;
+	const bool bOk = ActiveKeypad->Submit(KeypadInput);
+	if (bOk) CloseKeypad(); else KeypadInput.Empty();
+}
+
+// ------------------------------------------------------------------ spawning
 void AFOGameMode::SpawnZombiesBehindPlayer(int32 Count)
 {
 	AFOCharacter* P = Player();
-	if (!P) return;
+	if (!P || !World) return;
 	for (int32 i = 0; i < Count; i++)
 	{
-		FVector Loc = P->GetActorLocation() + FVector(FMath::FRandRange(1400.f, 2200.f), FMath::FRandRange(-400.f, 400.f), 0.f);
-		Loc.X = FMath::Clamp(Loc.X, -200.f, AFOWorldBuilder::StreetLength - 200.f);
+		FVector Loc = P->GetActorLocation() + FVector(FMath::FRandRange(1400.f, 2200.f) * (FMath::FRand() < 0.7f ? 1.f : -1.f), FMath::FRandRange(-400.f, 400.f), 0.f);
+		Loc.X = FMath::Clamp(Loc.X, -200.f, World->StreetLength - 200.f);
 		Loc.Y = FMath::Clamp(Loc.Y, -500.f, 500.f);
 		Loc.Z = 100.f;
-		FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), FTransform(FRotator(0, 180.f, 0), Loc)))
+		const FTransform T(FRotator(0, 180.f, 0), Loc);
+		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = FMath::RandRange(0, 3);
 			Z->bRunner = FMath::FRand() < 0.35f;
 			Z->bChasing = true;
-			UGameplayStatics::FinishSpawningActor(Z, FTransform(FRotator(0, 180.f, 0), Loc));
+			Z->HpMul = Level->ZombieHpMul;
+			UGameplayStatics::FinishSpawningActor(Z, T);
 		}
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Screenshot tour: waits for shaders, then captures a few framed views and exits.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------ self test
+void AFOGameMode::TickSelfTest(float Dt)
+{
+	SelfTestClock += Dt;
+	if (SelfTestClock < 1.f) return;
+	if (State == EFOState::Menu) { StartGame(); return; }
+	if (State == EFOState::Won) { UE_LOG(LogFO, Display, TEXT("SELFTEST PASS: level %d won, kills %d"), LevelIndex + 1, Kills); FPlatformMisc::RequestExit(false); return; }
+	if (State != EFOState::Playing || SelfTestClock > 30.f) { UE_LOG(LogFO, Error, TEXT("SELFTEST FAIL: state %d after %.0fs, stage %d"), (int32)State, SelfTestClock, Mission->StageIndex()); FPlatformMisc::RequestExit(false); return; }
+	// Drive one step per tick: satisfy every active objective of the current stage.
+	const int32 StageBefore = Mission->StageIndex();
+	for (const FFOObjectiveDef& O : Level->Stages[StageBefore].Objectives)
+	{
+		switch (O.Type)
+		{
+		case EFOObjectiveType::Collect: for (int32 i = 0; i < O.Count; i++) ReportEvent(FFOGameEvent(EFOGameEvent::ItemCollected, O.Tag)); break;
+		case EFOObjectiveType::Kill:    for (int32 i = 0; i < O.Count; i++) ReportEvent(FFOGameEvent(EFOGameEvent::ZombieKilled)); break;
+		case EFOObjectiveType::Reach:   ReportEvent(FFOGameEvent(EFOGameEvent::ExitReached)); break;
+		case EFOObjectiveType::SolvePuzzle:
+			for (TActorIterator<AFOPuzzleBase> It(GetWorld()); It; ++It) if (It->GetId() == O.Tag) It->DebugSolve();
+			break;
+		}
+		if (Mission->IsComplete() || Mission->StageIndex() != StageBefore) break;
+	}
+	UE_LOG(LogFO, Display, TEXT("SELFTEST: stage %d -> %d, complete=%d, hint='%s'"), StageBefore + 1, Mission->StageIndex() + 1, Mission->IsComplete(), *Hint);
+}
+
+// ------------------------------------------------------------------ screenshot tour
 void AFOGameMode::TickShots(float Dt)
 {
 	if (GShaderCompilingManager && GShaderCompilingManager->IsCompiling()) { ShotClock = 0.f; return; }
 	ShotClock += Dt;
+	const float L = World ? World->StreetLength : 9000.f;
 	struct FShot { FVector Loc; FRotator Rot; bool bMenu; };
-	static const FShot Shots[] = {
-		{ FVector(   0.f,    0.f, 100.f), FRotator(0,   0, 0), true  },  // menu overlay
-		{ FVector( 300.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // street ahead
-		{ FVector(1500.f, -300.f, 100.f), FRotator(0,  20, 0), false },  // first fuel can area
-		{ FVector(4300.f,  200.f, 100.f), FRotator(0, -25, 0), false },  // mid-street cars
-		{ FVector(7500.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // port gate
-		{ FVector( 300.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // diag 5: street, PP colour overrides off
-		{ FVector( 300.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // diag 6: street, PP exposure overrides off too
+	TArray<FShot> Shots = {
+		{ FVector(0.f, 0.f, 100.f), FRotator(0, 0, 0), true },        // menu overlay
+		{ FVector(300.f, 0.f, 100.f), FRotator(0, 0, 0), false },     // street ahead
+		{ FVector(L * 0.5f, 200.f, 100.f), FRotator(0, -25, 0), false }, // mid-street
 	};
-	int32 Num = UE_ARRAY_COUNT(Shots);
+	// Puzzle close-up if the level has one: stand 350 cm in front of it, looking at it.
+	if (Level && Level->Puzzles.Num() > 0)
+	{
+		const FFOPuzzleDef& P = Level->Puzzles[0];
+		const FVector Face = FRotator(0, P.Yaw, 0).Vector() * -1.f; // puzzle front (-X local)
+		Shots.Add({ P.Location + Face * 350.f + FVector(0, 0, 100.f), (-Face).Rotation(), false });
+	}
+	int32 Num = Shots.Num();
 	{ int32 Max = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotMax="), Max) && Max > 0) Num = FMath::Min(Num, Max); }
-	// Give each view ~6 s to stream/settle before capturing.
 	if (ShotClock < 6.f) return;
 	if (ShotIndex >= Num) { FPlatformMisc::RequestExit(false); return; }
 	const FShot& S = Shots[ShotIndex];
 	if (!S.bMenu && State == EFOState::Menu) StartGame();
 	if (AFOCharacter* P = Player())
-	{
 		if (ShotIndex > 0)
 		{
 			P->SetActorLocation(S.Loc, false, nullptr, ETeleportType::TeleportPhysics);
 			if (APlayerController* PC = Cast<APlayerController>(P->GetController())) PC->SetControlRotation(S.Rot);
 		}
-	}
-	// Optional per-shot diagnostics (-FOShotDiag): 1 baseline, 2 fog off, 3 +post-process off, 4 +bright moon.
 	static bool bArmed = false;
-	if (!bArmed && FParse::Param(FCommandLine::Get(), TEXT("FOShotDiag")) && GEngine)
-	{
-		UWorld* W = GetWorld();
-		if (ShotIndex == 2) GEngine->Exec(W, TEXT("r.Fog 0"));
-		if (ShotIndex == 3) GEngine->Exec(W, TEXT("showflag.postprocessing 0"));
-		if (ShotIndex == 4)
-		{
-			GEngine->Exec(W, TEXT("showflag.postprocessing 1"));
-			for (TActorIterator<AFOWorldBuilder> It(W); It; ++It)
-				if (It->Moon) { It->Moon->GetLightComponent()->SetIntensity(28.f); It->LightningT = 1e9f; }
-		}
-		if (ShotIndex == 5 || ShotIndex == 6)
-		{
-			for (TActorIterator<AFOWorldBuilder> It(W); It; ++It)
-				if (It->Moon) It->Moon->GetLightComponent()->SetIntensity(6.0f);
-			for (TActorIterator<APostProcessVolume> It(W); It; ++It)
-			{
-				FPostProcessSettings& PS = It->Settings;
-				PS.bOverride_SceneColorTint = false; PS.bOverride_ColorGamma = false; PS.bOverride_FilmToe = false;
-				if (ShotIndex == 6) { PS.bOverride_AutoExposureMethod = false; PS.bOverride_AutoExposureBias = false; }
-			}
-		}
-		UE_LOG(LogFO, Display, TEXT("Shot diag variant %d applied"), ShotIndex);
-	}
-	// Capture on the following frame so the teleport is visible; simple approach: alternate frames.
-	if (!bArmed) { bArmed = true; return; }
+	if (!bArmed) { bArmed = true; return; } // capture on the following frame so the teleport is visible
 	bArmed = false;
 	const FString Dir = FPaths::ProjectSavedDir() / TEXT("Shots");
 	IFileManager::Get().MakeDirectory(*Dir, true);

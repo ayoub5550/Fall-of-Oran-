@@ -3,6 +3,9 @@
 #include "FOZombie.h"
 #include "FOGameMode.h"
 #include "FOWorldBuilder.h"
+#include "Components/FOHealthComponent.h"
+#include "Components/FOWeaponComponent.h"
+#include "Components/FOInteractionComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -32,9 +35,19 @@ AFOCharacter::AFOCharacter()
 
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bOrientRotationToMovement = false; // RE-style: body follows camera yaw
-	GetCharacterMovement()->MaxWalkSpeed = 260.f;
-	GetCharacterMovement()->MaxAcceleration = 900.f;
-	GetCharacterMovement()->BrakingDecelerationWalking = 1400.f;
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	GetCharacterMovement()->MaxAcceleration = 1100.f;
+	GetCharacterMovement()->BrakingDecelerationWalking = 1600.f;
+	GetCharacterMovement()->GroundFriction = 8.f;
+	GetCharacterMovement()->BrakingFrictionFactor = 1.5f;
+	GetCharacterMovement()->bUseSeparateBrakingFriction = true;
+	GetCharacterMovement()->PerchRadiusThreshold = 20.f;   // don't hang on kerbs
+	GetCharacterMovement()->SetWalkableFloorAngle(50.f);
+	GetCharacterMovement()->MaxStepHeight = 48.f;           // kerbs, debris
+
+	HealthComp = CreateDefaultSubobject<UFOHealthComponent>(TEXT("Health"));
+	Weapon = CreateDefaultSubobject<UFOWeaponComponent>(TEXT("Weapon"));
+	Interaction = CreateDefaultSubobject<UFOInteractionComponent>(TEXT("Interaction"));
 
 	Boom = CreateDefaultSubobject<USpringArmComponent>(TEXT("Boom"));
 	Boom->SetupAttachment(RootComponent);
@@ -43,7 +56,10 @@ AFOCharacter::AFOCharacter()
 	Boom->TargetOffset = FVector(0.f, 0.f, 60.f);
 	Boom->bUsePawnControlRotation = true;
 	Boom->bEnableCameraLag = true;
-	Boom->CameraLagSpeed = 12.f;
+	Boom->CameraLagSpeed = 14.f;
+	Boom->bEnableCameraRotationLag = true;
+	Boom->CameraRotationLagSpeed = 18.f;
+	Boom->CameraLagMaxDistance = 60.f;
 	Boom->bDoCollisionTest = true;
 
 	Cam = CreateDefaultSubobject<UCameraComponent>(TEXT("Cam"));
@@ -117,6 +133,8 @@ AFOCharacter::AFOCharacter()
 	IA_Fire->ValueType = EInputActionValueType::Boolean;
 	IA_Sprint = CreateDefaultSubobject<UInputAction>(TEXT("IA_Sprint"));
 	IA_Sprint->ValueType = EInputActionValueType::Boolean;
+	IA_Interact = CreateDefaultSubobject<UInputAction>(TEXT("IA_Interact"));
+	IA_Interact->ValueType = EInputActionValueType::Boolean;
 
 	auto Swz = [this](const TCHAR* N) { auto* M = CreateDefaultSubobject<UInputModifierSwizzleAxis>(N); M->Order = EInputAxisSwizzle::YXZ; return M; };
 	auto Neg = [this](const TCHAR* N) { return CreateDefaultSubobject<UInputModifierNegate>(N); };
@@ -132,6 +150,8 @@ AFOCharacter::AFOCharacter()
 	IMC->MapKey(IA_Fire, EKeys::SpaceBar);
 	IMC->MapKey(IA_Sprint, EKeys::LeftShift);
 	IMC->MapKey(IA_Sprint, EKeys::Gamepad_LeftThumbstick);
+	IMC->MapKey(IA_Interact, EKeys::E);
+	IMC->MapKey(IA_Interact, EKeys::Gamepad_FaceButton_Left);
 }
 
 void AFOCharacter::LoadAnims()
@@ -164,6 +184,8 @@ void AFOCharacter::BeginPlay()
 		PC->SetControlRotation(FRotator(-8.f, GetActorRotation().Yaw, 0.f));
 	}
 	PlayAnim(EFOAnim::Idle, true);
+	BindWeaponEvents();
+	HealthComp->OnDied.AddUObject(this, &AFOCharacter::OnDied);
 	if (HeartbeatSound)
 	{
 		Heartbeat = UGameplayStatics::SpawnSound2D(this, HeartbeatSound, 0.f, 1.f, 0.f, nullptr, true, false);
@@ -181,6 +203,7 @@ void AFOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		EIC->BindAction(IA_Fire, ETriggerEvent::Started, this, &AFOCharacter::OnFire);
 		EIC->BindAction(IA_Sprint, ETriggerEvent::Started, this, &AFOCharacter::OnSprintStart);
 		EIC->BindAction(IA_Sprint, ETriggerEvent::Completed, this, &AFOCharacter::OnSprintEnd);
+		EIC->BindAction(IA_Interact, ETriggerEvent::Started, this, &AFOCharacter::OnInteract);
 	}
 	PlayerInputComponent->BindTouch(IE_Pressed, this, &AFOCharacter::OnTouchBegin);
 	PlayerInputComponent->BindTouch(IE_Repeat, this, &AFOCharacter::OnTouchMove);
@@ -197,6 +220,7 @@ void AFOCharacter::OnLook(const FInputActionValue& V)
 void AFOCharacter::OnFire(const FInputActionValue&) { TryShoot(); }
 void AFOCharacter::OnSprintStart(const FInputActionValue&) { bSprinting = true; }
 void AFOCharacter::OnSprintEnd(const FInputActionValue&) { bSprinting = false; }
+void AFOCharacter::OnInteract(const FInputActionValue&) { TryInteract(); }
 
 void AFOCharacter::OnTouchBegin(ETouchIndex::Type Idx, FVector Loc)
 {
@@ -234,118 +258,81 @@ void AFOCharacter::Tick(float Dt)
 	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
 	const bool bPlaying = GM && GM->State == EFOState::Playing;
 
-	FireCooldown -= Dt;
 	MuzzleTimer -= Dt;
 	if (Muzzle) Muzzle->SetIntensity(MuzzleTimer > 0.f ? 4000.f : 0.f);
 	if (OneShotTimer > 0.f) OneShotTimer -= Dt;
-	if (bReloading)
-	{
-		ReloadTimer -= Dt;
-		if (ReloadTimer <= 0.f)
-		{
-			bReloading = false;
-			const int32 Need = MagSize - Ammo;
-			const int32 Take = FMath::Min(Need, Reserve);
-			Ammo += Take; Reserve -= Take;
-		}
-	}
 
-	if (IsDead())
-	{
-		GetCharacterMovement()->StopMovementImmediately();
-		return;
-	}
-	if (!bPlaying) { MoveInput = FVector2D::ZeroVector; PlayAnim(EFOAnim::Idle, true); return; }
+	if (IsDead()) { GetCharacterMovement()->StopMovementImmediately(); return; }
+	if (!bPlaying || (GM && GM->IsKeypadOpen())) { MoveInput = FVector2D::ZeroVector; MoveSmoothed = FVector2D::ZeroVector; PlayAnim(EFOAnim::Idle, true); return; }
 
-	// Movement relative to the camera yaw; body faces camera yaw (RE4 style)
+	// --- movement: camera-relative, smoothed stick, body turns toward camera yaw (RE-style)
+	MoveSmoothed = FMath::Vector2DInterpTo(MoveSmoothed, MoveInput.GetClampedToMaxSize(1.f), Dt, InputSmoothing);
 	const FRotator YawRot(0.f, GetControlRotation().Yaw, 0.f);
 	const FVector Fwd = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 	const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
-	const float Injured = Health < 30.f ? 0.7f : 1.f;
-	GetCharacterMovement()->MaxWalkSpeed = (bSprinting ? 420.f : 260.f) * Injured;
-	if (!MoveInput.IsNearlyZero(0.05f))
+	const bool bInjured = HealthComp->IsLow();
+	const bool bCanSprint = bSprinting && !bInjured && !Weapon->bReloading && MoveSmoothed.Y > 0.3f;
+	const float TargetSpeed = (bCanSprint ? SprintSpeed : WalkSpeed) * (bInjured ? InjuredSpeedMul : 1.f);
+	GetCharacterMovement()->MaxWalkSpeed = FMath::FInterpTo(GetCharacterMovement()->MaxWalkSpeed, TargetSpeed, Dt, 6.f);
+	if (!MoveSmoothed.IsNearlyZero(0.03f))
 	{
-		AddMovementInput(Fwd, MoveInput.Y);
-		AddMovementInput(Right, MoveInput.X);
+		AddMovementInput(Fwd, MoveSmoothed.Y);
+		AddMovementInput(Right, MoveSmoothed.X);
 	}
-	SetActorRotation(FMath::RInterpTo(GetActorRotation(), YawRot, Dt, 10.f));
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), YawRot, Dt, BodyTurnSpeed));
 
-	// Animation state
+	// --- camera feel: FOV and boom ease with sprint
+	const float Spd = GetVelocity().Size2D();
+	const bool bSprintingNow = Spd > WalkSpeed + 40.f;
+	Cam->SetFieldOfView(FMath::FInterpTo(Cam->FieldOfView, bSprintingNow ? SprintFov : BaseFov, Dt, 5.f));
+	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bSprintingNow ? SprintCamLength : 260.f, Dt, 4.f);
+
+	// --- animation state
 	if (OneShotTimer <= 0.f)
 	{
-		const float Spd = GetVelocity().Size2D();
-		if (Spd > 300.f) PlayAnim(EFOAnim::Run, true);
-		else if (Spd > 20.f) PlayAnim(Health < 30.f ? EFOAnim::InjuredWalk : EFOAnim::Walk, true, FMath::Clamp(Spd / 220.f, 0.7f, 1.3f));
-		else PlayAnim(Health < 30.f ? EFOAnim::InjuredIdle : EFOAnim::Idle, true);
+		if (Spd > WalkSpeed + 30.f) PlayAnim(EFOAnim::Run, true, FMath::Clamp(Spd / SprintSpeed, 0.8f, 1.15f));
+		else if (Spd > 20.f) PlayAnim(bInjured ? EFOAnim::InjuredWalk : EFOAnim::Walk, true, FMath::Clamp(Spd / 220.f, 0.7f, 1.3f));
+		else PlayAnim(bInjured ? EFOAnim::InjuredIdle : EFOAnim::Idle, true);
 	}
 
-	// Heartbeat when hurt
+	// --- heartbeat when hurt
 	if (Heartbeat)
 	{
-		const float Want = Health < 40.f ? FMath::GetMappedRangeValueClamped(FVector2D(0.f, 40.f), FVector2D(1.f, 0.f), Health) : 0.f;
+		const float H = HealthComp->GetHealth();
+		const float Want = H < 40.f ? FMath::GetMappedRangeValueClamped(FVector2D(0.f, 40.f), FVector2D(1.f, 0.f), H) : 0.f;
 		Heartbeat->SetVolumeMultiplier(FMath::FInterpTo(Heartbeat->VolumeMultiplier, Want, Dt, 2.f));
 		if (Want > 0.f && !Heartbeat->IsPlaying()) Heartbeat->Play();
 	}
 }
 
-void AFOCharacter::StartReload()
+// ------------------------------------------------------------------ weapon glue
+void AFOCharacter::BindWeaponEvents()
 {
-	if (bReloading || Reserve <= 0 || Ammo >= MagSize) return;
-	bReloading = true;
-	ReloadTimer = 1.6f;
-	PlayAnim(EFOAnim::Reload, false, 1.4f);
-	if (ReloadSound) UGameplayStatics::PlaySound2D(this, ReloadSound);
+	Weapon->OnFired.AddLambda([this]() {
+		MuzzleTimer = 0.06f;
+		PlayAnim(EFOAnim::Shoot, false, 1.6f);
+		if (GunSound) UGameplayStatics::PlaySoundAtLocation(this, GunSound, GetActorLocation());
+	});
+	Weapon->OnDryFire.AddLambda([this]() { if (ClickSound) UGameplayStatics::PlaySound2D(this, ClickSound); });
+	Weapon->OnReloadStart.AddLambda([this]() {
+		PlayAnim(EFOAnim::Reload, false, 1.4f);
+		if (ReloadSound) UGameplayStatics::PlaySound2D(this, ReloadSound);
+	});
+	Weapon->OnHit.AddLambda([this](AActor* Hit, const FHitResult& R) { SpawnBloodAt(R.ImpactPoint, R.ImpactNormal); });
 }
 
 void AFOCharacter::TryShoot()
 {
 	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
-	if (!GM || GM->State != EFOState::Playing || IsDead() || bReloading || FireCooldown > 0.f) return;
-	if (Ammo <= 0)
-	{
-		if (ClickSound) UGameplayStatics::PlaySound2D(this, ClickSound);
-		StartReload();
-		return;
-	}
-	Ammo--;
-	FireCooldown = 0.32f;
-	MuzzleTimer = 0.06f;
-	PlayAnim(EFOAnim::Shoot, false, 1.6f);
-	if (GunSound) UGameplayStatics::PlaySoundAtLocation(this, GunSound, GetActorLocation());
+	if (!GM || GM->State != EFOState::Playing || GM->IsKeypadOpen() || IsDead()) return;
+	Weapon->Fire(Cam->GetComponentLocation(), Cam->GetForwardVector());
+}
 
-	// Camera-centre ray
-	const FVector Start = Cam->GetComponentLocation();
-	const FVector Dir = Cam->GetForwardVector();
-	FHitResult Hit;
-	FCollisionQueryParams QP(SCENE_QUERY_STAT(Shoot), true, this);
-	AFOZombie* Target = nullptr;
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Dir * GunRange, ECC_Visibility, QP))
-	{
-		Target = Cast<AFOZombie>(Hit.GetActor());
-		if (!Target) SpawnBloodAt(Hit.ImpactPoint, Hit.ImpactNormal); // wall dust/impact: reuse decal spawner
-	}
-	// Aim assist (from the Godot build): nearest living zombie inside a distance-scaled cone
-	if (!Target)
-	{
-		float Best = 1e9f;
-		for (TActorIterator<AFOZombie> It(GetWorld()); It; ++It)
-		{
-			AFOZombie* Z = *It;
-			if (Z->bDying) continue;
-			const FVector To = Z->GetActorLocation() + FVector(0, 0, 60.f) - Start;
-			const float D = To.Size();
-			if (D > GunRange) continue;
-			const float Cone = FMath::Clamp(190.f / FMath::Max(D / 100.f, 1.f), 0.12f, 0.35f);
-			const float Ang = FMath::Acos(FVector::DotProduct(To.GetSafeNormal(), Dir));
-			if (Ang < Cone && D < Best) { Best = D; Target = Z; }
-		}
-	}
-	if (Target)
-	{
-		Target->TakeHit(GunDamage, this);
-		SpawnBloodAt(Target->GetActorLocation() + FVector(0, 0, 80.f), -Dir);
-	}
-	if (Ammo == 0) StartReload();
+void AFOCharacter::TryInteract()
+{
+	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
+	if (!GM || GM->State != EFOState::Playing || IsDead()) return;
+	Interaction->TryInteract();
 }
 
 void AFOCharacter::SpawnBloodAt(const FVector& Loc, const FVector& Normal)
@@ -353,22 +340,31 @@ void AFOCharacter::SpawnBloodAt(const FVector& Loc, const FVector& Normal)
 	if (AFOWorldBuilder* WB = AFOWorldBuilder::Get(GetWorld())) WB->SpawnBloodSplat(Loc, Normal);
 }
 
+// ------------------------------------------------------------------ health glue
 void AFOCharacter::TakeHit(float Amount)
 {
 	if (IsDead()) return;
 	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
 	if (!GM || GM->State != EFOState::Playing) return;
-	Health = FMath::Max(0.f, Health - Amount);
+	if (HealthComp->ApplyDamage(Amount) <= 0.f) return;
 	GM->OnPlayerDamaged();
 	if (HurtSound) UGameplayStatics::PlaySound2D(this, HurtSound);
-	if (Health <= 0.f)
-	{
-		PlayAnim(EFOAnim::Death, false);
-		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		GM->OnPlayerDied();
-	}
-	else PlayAnim(EFOAnim::Hit, false, 1.5f);
+	if (!IsDead()) PlayAnim(EFOAnim::Hit, false, 1.5f);
 }
 
-void AFOCharacter::AddAmmo(int32 N) { Reserve += N; }
-void AFOCharacter::AddHealth(float N) { Health = FMath::Min(100.f, Health + N); }
+void AFOCharacter::OnDied()
+{
+	PlayAnim(EFOAnim::Death, false);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->OnPlayerDied();
+}
+
+void AFOCharacter::AddAmmo(int32 N) { Weapon->AddReserve(N); }
+void AFOCharacter::AddHealth(float N) { HealthComp->Heal(N); }
+bool AFOCharacter::IsDead() const { return HealthComp && HealthComp->IsDead(); }
+float AFOCharacter::GetHealth() const { return HealthComp ? HealthComp->GetHealth() : 0.f; }
+float AFOCharacter::GetHealthFraction() const { return HealthComp ? HealthComp->GetFraction() : 0.f; }
+int32 AFOCharacter::GetAmmo() const { return Weapon ? Weapon->Ammo : 0; }
+int32 AFOCharacter::GetReserve() const { return Weapon ? Weapon->Reserve : 0; }
+bool AFOCharacter::HasInteractTarget() const { return Interaction && Interaction->HasTarget(); }
+FString AFOCharacter::GetInteractPrompt() const { return Interaction ? Interaction->GetPrompt() : FString(); }

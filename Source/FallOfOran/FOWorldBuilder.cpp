@@ -4,6 +4,9 @@
 #include "FOPickup.h"
 #include "FOCharacter.h"
 #include "FOGameMode.h"
+#include "Puzzles/FOBreakerPuzzle.h"
+#include "Puzzles/FOKeypadPuzzle.h"
+#include "Puzzles/FONote.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -180,9 +183,14 @@ UPointLightComponent* AFOWorldBuilder::Light(const FVector& Loc, const FLinearCo
 }
 
 // ------------------------------------------------------------------ world
-void AFOWorldBuilder::BuildWorld()
+void AFOWorldBuilder::BuildWorld(const FFOLevelDef& Def)
 {
-	UE_LOG(LogFO, Log, TEXT("Building Oran street..."));
+	LevelDef = &Def;
+	StreetLength = Def.StreetLength;
+	Rng.Initialize(Def.Seed);
+	BaseMoon = Def.Lighting.MoonIntensity;
+	BaseSky = Def.Lighting.SkyLightIntensity;
+	UE_LOG(LogFO, Log, TEXT("Building level '%s' (seed %d, %.0f cm)..."), *Def.Title, Def.Seed, StreetLength);
 	BuildLighting();
 	BuildSky();
 	BuildGround();
@@ -191,7 +199,8 @@ void AFOWorldBuilder::BuildWorld()
 	BuildCars();
 	BuildDebris();
 	BuildExitGate();
-	SpawnPickups();
+	SpawnItems();
+	SpawnPuzzles();
 	SpawnZombies();
 	if (USoundBase* Amb = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/ambience.ambience")))
 		Ambience = UGameplayStatics::SpawnSound2D(this, Amb, 0.8f, 1.f, 0.f, nullptr, true, true);
@@ -208,7 +217,7 @@ void AFOWorldBuilder::BuildLighting()
 		Moon->SetMobility(EComponentMobility::Movable);
 		UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Moon->GetLightComponent());
 		D->SetIntensity(BaseMoon);
-		D->SetLightColor(FLinearColor(0.6f, 0.7f, 0.92f));
+		D->SetLightColor(LevelDef ? LevelDef->Lighting.MoonColor : FLinearColor(0.6f, 0.7f, 0.92f));
 		D->SetCastShadows(true);
 		D->SetDynamicShadowDistanceMovableLight(6000.f);
 		D->SetShadowAmount(0.85f);
@@ -227,9 +236,9 @@ void AFOWorldBuilder::BuildLighting()
 	if (Fog)
 	{
 		UExponentialHeightFogComponent* F = Fog->GetComponent();
-		F->SetFogDensity(0.014f);
+		F->SetFogDensity(LevelDef ? LevelDef->Lighting.FogDensity : 0.014f);
 		F->SetFogHeightFalloff(0.35f);
-		F->SetFogInscatteringColor(FLinearColor(0.10f, 0.12f, 0.18f));
+		F->SetFogInscatteringColor(LevelDef ? LevelDef->Lighting.FogColor : FLinearColor(0.10f, 0.12f, 0.18f));
 		F->SetStartDistance(300.f);
 		F->SetFogMaxOpacity(0.96f);
 		F->SetDirectionalInscatteringColor(FLinearColor(0.35f, 0.25f, 0.12f));
@@ -574,43 +583,68 @@ void AFOWorldBuilder::ApplyBrightness(float Mul)
 void AFOWorldBuilder::OnExitOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	if (Cast<AFOCharacter>(Other))
-		if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->OnExitReached();
+		if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->ReportEvent(FFOGameEvent(EFOGameEvent::ExitReached));
 }
 
-void AFOWorldBuilder::SpawnPickups()
+void AFOWorldBuilder::SpawnItems()
 {
-	auto Spawn = [this](const FVector& Loc, EFOPickup Kind) {
-		if (AFOPickup* P = GetWorld()->SpawnActorDeferred<AFOPickup>(AFOPickup::StaticClass(), FTransform(Loc)))
+	if (!LevelDef) return;
+	for (const FFOItemSpawn& It : LevelDef->Items)
+	{
+		if (It.Item == EFOItem::Note)
 		{
-			P->Kind = Kind;
-			UGameplayStatics::FinishSpawningActor(P, FTransform(Loc));
+			if (AFONote* N = GetWorld()->SpawnActor<AFONote>(AFONote::StaticClass(), It.Location, FRotator(0, Rng.FRandRange(0, 360.f), 0)))
+			{ N->Text = It.Text; if (!It.Tag.IsNone()) N->Tag = It.Tag; }
+			continue;
 		}
-	};
-	Spawn(FVector(1800.f, -420.f, 50.f), EFOPickup::Fuel);
-	Spawn(FVector(4800.f, 400.f, 50.f), EFOPickup::Fuel);
-	Spawn(FVector(7800.f, -300.f, 50.f), EFOPickup::Fuel);
-	Spawn(FVector(2800.f, 250.f, 40.f), EFOPickup::Health);
-	Spawn(FVector(5800.f, -450.f, 40.f), EFOPickup::Health);
-	Spawn(FVector(7200.f, 350.f, 40.f), EFOPickup::Health);
-	Spawn(FVector(1400.f, -200.f, 40.f), EFOPickup::Ammo);
-	Spawn(FVector(3800.f, 450.f, 40.f), EFOPickup::Ammo);
-	Spawn(FVector(4400.f, -400.f, 40.f), EFOPickup::Ammo);
-	Spawn(FVector(6600.f, 150.f, 40.f), EFOPickup::Ammo);
+		if (AFOPickup* P = GetWorld()->SpawnActorDeferred<AFOPickup>(AFOPickup::StaticClass(), FTransform(It.Location)))
+		{
+			P->Item = It.Item;
+			P->Tag = It.Tag.IsNone() ? FName(It.Item == EFOItem::Fuel ? TEXT("fuel") : It.Item == EFOItem::Health ? TEXT("health") : TEXT("ammo")) : It.Tag;
+			UGameplayStatics::FinishSpawningActor(P, FTransform(It.Location));
+		}
+	}
+}
+
+void AFOWorldBuilder::SpawnPuzzles()
+{
+	if (!LevelDef) return;
+	for (const FFOPuzzleDef& PD : LevelDef->Puzzles)
+	{
+		UClass* Cls = nullptr;
+		switch (PD.Type)
+		{
+		case EFOPuzzleType::BreakerSequence: Cls = AFOBreakerPuzzle::StaticClass(); break;
+		case EFOPuzzleType::Keypad:          Cls = AFOKeypadPuzzle::StaticClass(); break;
+		}
+		if (!Cls) continue;
+		AFOPuzzleBase* P = GetWorld()->SpawnActor<AFOPuzzleBase>(Cls, PD.Location, FRotator(0, PD.Yaw, 0));
+		if (!P) continue;
+		P->Setup(PD, Rng);
+		// Notes carrying this puzzle's hints
+		for (int32 i = 0; i < PD.NoteLocations.Num(); i++)
+			if (AFONote* N = GetWorld()->SpawnActor<AFONote>(AFONote::StaticClass(), PD.NoteLocations[i], FRotator(0, Rng.FRandRange(0, 360.f), 0)))
+				N->Text = P->GetHintText(i);
+		UE_LOG(LogFO, Display, TEXT("Puzzle '%s' spawned with %d notes"), *PD.Id.ToString(), PD.NoteLocations.Num());
+	}
 }
 
 void AFOWorldBuilder::SpawnZombies()
 {
-	const FVector Spots[16] = {
-		{2200,-300,0},{3500,350,0},{5000,-200,0},{6200,200,0},{7500,-350,0},{8200,0,0},{4500,400,0},{6800,-400,0},
-		{2800,150,0},{5800,-100,0},{8800,300,0},{7000,-250,0},{7800,100,0},{8500,-400,0},{8000,400,0},{8600,50,0} };
-	for (int32 i = 0; i < 16; i++)
+	if (!LevelDef) return;
+	// Seeded, evenly spread along the street (never in the first 15 m so the player gets a breath).
+	const int32 N = LevelDef->ZombieCount;
+	for (int32 i = 0; i < N; i++)
 	{
-		const FVector Loc = Spots[i] + FVector(0, 0, 100.f);
+		const float Frac = (i + 0.5f) / N;
+		const float X = FMath::Lerp(1500.f, StreetLength - 300.f, Frac) + Rng.FRandRange(-300.f, 300.f);
+		const FVector Loc(X, Rng.FRandRange(-450.f, 450.f), 100.f);
 		const FTransform T(FRotator(0, Rng.FRandRange(0, 360.f), 0), Loc);
 		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = i % 4;
-			Z->bRunner = (i % 5 == 2);
+			Z->bRunner = Rng.FRand() < LevelDef->RunnerChance;
+			Z->HpMul = LevelDef->ZombieHpMul;
 			UGameplayStatics::FinishSpawningActor(Z, T);
 		}
 	}
@@ -655,6 +689,7 @@ void AFOWorldBuilder::Tick(float Dt)
 			Lamps[i]->SetIntensity(BaseLamp * Bright * F);
 		}
 	// Lightning: flash the moon, thunder follows
+	if (LevelDef && !LevelDef->Lighting.bLightning) LightningT = 1e9f;
 	LightningT -= Dt;
 	if (LightningT <= 0.f && Moon)
 	{

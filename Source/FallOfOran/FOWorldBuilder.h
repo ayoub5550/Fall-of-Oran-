@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/FOTypes.h"
 #include "FOWorldBuilder.generated.h"
 
 class UStaticMesh;
@@ -37,10 +38,12 @@ class AFOWorldBuilder : public AActor
 public:
 	AFOWorldBuilder();
 	static AFOWorldBuilder* Get(UWorld* W);
-	static constexpr float StreetLength = 9000.f;
+	float StreetLength = 9000.f;   // set from FFOLevelDef
 	static constexpr float StreetWidth = 1200.f;
 
-	void BuildWorld();
+	/** Builds the level described by Def: geometry (seeded), lighting preset, items, puzzles, notes, zombies. */
+	void BuildWorld(const FFOLevelDef& Def);
+	const FFOLevelDef* LevelDef = nullptr;
 	void SpawnBloodPool(const FVector& Loc);
 	void SpawnBloodSplat(const FVector& Loc, const FVector& Normal);
 	virtual void Tick(float Dt) override;
@@ -66,7 +69,8 @@ public:
 	void BuildDebris();
 	void BuildPalm(const FVector& Base);
 	void BuildExitGate();
-	void SpawnPickups();
+	void SpawnItems();
+	void SpawnPuzzles();
 	void SpawnZombies();
 	void BuildSky();
 

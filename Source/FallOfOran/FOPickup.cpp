@@ -32,10 +32,10 @@ void AFOPickup::BeginPlay()
 {
 	Super::BeginPlay();
 	FLinearColor C; FVector Size;
-	switch (Kind)
+	switch (Item)
 	{
-	case EFOPickup::Fuel: C = FLinearColor(0.9f, 0.35f, 0.05f); Size = FVector(35.f, 25.f, 45.f); break;
-	case EFOPickup::Health: C = FLinearColor(0.85f, 0.1f, 0.1f); Size = FVector(40.f, 30.f, 25.f); break;
+	case EFOItem::Fuel: C = FLinearColor(0.9f, 0.35f, 0.05f); Size = FVector(35.f, 25.f, 45.f); break;
+	case EFOItem::Health: C = FLinearColor(0.85f, 0.1f, 0.1f); Size = FVector(40.f, 30.f, 25.f); break;
 	default: C = FLinearColor(0.25f, 0.45f, 0.15f); Size = FVector(35.f, 25.f, 22.f); break;
 	}
 	Mesh->SetRelativeScale3D(Size / 100.f);
@@ -66,11 +66,12 @@ void AFOPickup::OnOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveCompone
 	AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>();
 	if (!P || !GM || GM->State != EFOState::Playing) return;
 	if (USoundBase* S = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/pickup.pickup"))) UGameplayStatics::PlaySound2D(this, S);
-	switch (Kind)
+	switch (Item)
 	{
-	case EFOPickup::Fuel: GM->OnFuelCollected(); break;
-	case EFOPickup::Health: P->AddHealth(40.f); GM->DamageFlash = 0.3f; break;
-	default: P->AddAmmo(12); break;
+	case EFOItem::Health: P->AddHealth(HealAmount); GM->DamageFlash = 0.3f; break;
+	case EFOItem::Ammo: P->AddAmmo(AmmoAmount); break;
+	default: break;
 	}
+	GM->ReportEvent(FFOGameEvent(EFOGameEvent::ItemCollected, Tag));
 	Destroy();
 }

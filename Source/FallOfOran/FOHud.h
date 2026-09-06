@@ -5,8 +5,12 @@
 class AFOGameMode;
 class STextBlock;
 class SBox;
+class SBorder;
 
-/** Slate HUD built in code (no UMG assets): health bar, ammo, kills, fuel, objective, fire button, menus. */
+/**
+ * Slate HUD built in code (no UMG assets). Reads AFOGameMode every frame (no delegates needed for a
+ * single-player HUD). Layers: flash | in-game HUD | hint banner | note panel | keypad | menu overlay.
+ */
 class SFOHud : public SCompoundWidget
 {
 public:
@@ -20,17 +24,22 @@ public:
 	virtual bool SupportsKeyboardFocus() const override { return false; }
 private:
 	FReply HandleTap();
-	FReply OnFirePressed();
 	TSharedRef<SWidget> BrightnessBar(int32 FontSize);
-	TSharedPtr<STextBlock> BrightText, BrightText2;
-	TWeakObjectPtr<AFOGameMode> GM;
-	TSharedPtr<STextBlock> AmmoText, KillsText, FuelText, ObjectiveText, TitleText, SubtitleText;
-	TSharedPtr<SBox> HealthFill;
-	TSharedPtr<SWidget> Overlay, Flash, GameHud;
+	TSharedRef<SWidget> KeypadPanel();
+	TSharedRef<SWidget> HudButton(const FText& Label, int32 FontSize, float W, float H, const FLinearColor& Col, TFunction<void()> OnPress);
 	FSlateFontInfo Font(int32 Size) const;
 	FSlateColor FlashColor() const;
 	EVisibility OverlayVis() const;
 	EVisibility HudVis() const;
+	EVisibility HintVis() const;
+	EVisibility NoteVis() const;
+	EVisibility KeypadVis() const;
+	EVisibility InteractVis() const;
+	EVisibility MenuOnlyVis() const;
+
+	TWeakObjectPtr<AFOGameMode> GM;
+	TSharedPtr<STextBlock> AmmoText, KillsText, LevelText, ObjectiveText, TitleText, SubtitleText, HintText, NoteTextBlock, InteractText, KeypadText, BrightText, BrightText2;
+	TSharedPtr<SBox> HealthFill;
 	float HealthFrac = 1.f;
 	FLinearColor FlashCol = FLinearColor::Transparent;
 };

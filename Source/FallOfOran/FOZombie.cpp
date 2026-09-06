@@ -70,6 +70,7 @@ AFOZombie::AFOZombie()
 void AFOZombie::BeginPlay()
 {
 	Super::BeginPlay();
+	Hp *= HpMul;
 	Anims = *SharedAnims();
 	if (USkeletalMesh* SK = LoadObject<USkeletalMesh>(nullptr, ZombieMeshPaths[FMath::Clamp(Variant, 0, 3)]))
 	{
@@ -120,7 +121,7 @@ void AFOZombie::Die(AFOCharacter* Killer)
 	DeathTimer = 4.5f;
 	if (DieSound) UGameplayStatics::PlaySoundAtLocation(this, DieSound, GetActorLocation());
 	if (AFOWorldBuilder* WB = AFOWorldBuilder::Get(GetWorld())) WB->SpawnBloodPool(GetActorLocation());
-	if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->OnZombieKilled(Killer);
+	if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->ReportEvent(FFOGameEvent(EFOGameEvent::ZombieKilled, FName(*FString::FromInt(Variant))));
 }
 
 void AFOZombie::Tick(float Dt)

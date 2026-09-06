@@ -30,6 +30,7 @@ public:
 	bool bDying = false;
 	bool bScreamed = false;
 	float Hp = 100.f;
+	float HpMul = 1.f;          // per-level difficulty (applied in BeginPlay)
 	float AttackTimer = 0.f;
 	float WanderTimer = 0.f;
 	FVector WanderDir = FVector::ZeroVector;

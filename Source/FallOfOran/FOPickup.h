@@ -1,16 +1,14 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/FOTypes.h"
 #include "FOPickup.generated.h"
 
 class UStaticMeshComponent;
 class UPointLightComponent;
 class USphereComponent;
 
-UENUM()
-enum class EFOPickup : uint8 { Fuel, Health, Ammo };
-
-/** Glowing pickup: fuel can (objective), medkit (+40 hp), ammo box (+12). */
+/** Glowing pickup: fuel can (objective item, reports ItemCollected(Tag)), medkit (+HealAmount), ammo box (+AmmoAmount). */
 UCLASS()
 class AFOPickup : public AActor
 {
@@ -19,7 +17,10 @@ public:
 	AFOPickup();
 	virtual void BeginPlay() override;
 	virtual void Tick(float Dt) override;
-	EFOPickup Kind = EFOPickup::Ammo;
+	EFOItem Item = EFOItem::Ammo;
+	FName Tag = TEXT("ammo");
+	float HealAmount = 40.f;
+	int32 AmmoAmount = 12;
 	UPROPERTY() UStaticMeshComponent* Mesh = nullptr;
 	UPROPERTY() UPointLightComponent* Glow = nullptr;
 	UPROPERTY() USphereComponent* Trigger = nullptr;
