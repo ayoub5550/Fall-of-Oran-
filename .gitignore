@@ -10,5 +10,7 @@ Saved/
 RawAssets/Mixamo/
 *.zip
 *.apk
+.worktrees/
+__pycache__/
 # Godot legacy caches
 legacy-godot/.godot/

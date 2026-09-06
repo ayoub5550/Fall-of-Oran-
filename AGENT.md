@@ -10,7 +10,7 @@
 3. Content is *data-driven*: to add a level or puzzle you edit `Core/FOLevelRegistry.cpp`, not gameplay classes.
 4. Push to `main` early and often — commit and push code changes as soon as they are written, **without waiting for a compile or smoke test** (owner's standing rule since 2026-09-06; the old "only push after it compiles" rule is retired). Mark unverified commits with a `[WIP]`/`untested` note in the message and verify/fix in follow-up commits. Tag releases `vX.Y` only after §4.2 + §4.4 pass.
 5. Phone truth beats sandbox truth: the owner tests on a real Android device; sandbox renders (CPU Vulkan) are only a sanity check.
-6. **Play-testing from the sandbox = Appetize.io.** You cannot run an emulator here (no KVM/GPU). To actually play the APK, **ask the owner for an Appetize.io API key** (appetize.io → account → API Token), then run `Tools/appetize_upload.sh <apk> "vX.Y"` and send him the play link (§4.5). Never commit or print the key.
+6. **Cloud play-testing route to try = Appetize.io.** There is no usable local emulator here (no KVM/GPU). **Ask the owner for an Appetize.io API key** (appetize.io → account → API Token), then upload the checked APK with `Tools/appetize_upload.sh <apk> "vX.Y"` (§4.5). A successful upload is NOT proof the game runs: verify installation, launch, graphics and controls in an actual session before claiming playability. Never commit or print the key.
 
 ## 1. Project facts
 | | |
@@ -69,8 +69,12 @@ Engine at `/work/repos/unrealengine` (see `AI-AGENT-BUILD.md` there). Project at
 ```bash
 # 4.1 compile editor module (~1.5 min incremental)
 PATH=/work/temp/fakebin:$PATH Engine/Build/BatchFiles/Linux/Build.sh FallOfOranEditor Linux Development -project=$PROJ/FallOfOran.uproject
-# 4.2 logic smoke test, one level, no rendering (~1 min). Expect: "GameInstance: 3 levels", "Building level", "Mission: stage 1/…", "Puzzle '…' spawned"
-UnrealEditor-Cmd $PROJ/FallOfOran.uproject -game -nullrhi -nosound -unattended -log -FOLevel=1 -FOShots -FOShotMax=2
+# 4.2 logic tests, sequential, no rendering. UE_ROOT defaults to /work/repos/unrealengine.
+# Checks both process exit status and game log markers; never kills unrelated editor processes.
+UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/selftest.sh"
+UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/smoke_test.sh" 1
+# Self-test injects gameplay events / DebugSolve; it is NOT a touch-input or graphics test.
+# Logs + summary.json: Saved/Automation/<timestamp>/. Override with --log-dir; cold-start timeout: --timeout 900.
 # 4.3 proof screenshots on CPU Vulkan (~4 min per frame; -vulkandebug is mandatory or it SIGSEGVs at LoadMap)
 LP_NUM_THREADS=1 UnrealEditor-Cmd $PROJ/FallOfOran.uproject -game -vulkan -AllowCPUDevices -featureleveles31 -RenderOffscreen -norhithread -vulkandebug -FOShots -FOShotMax=4 -FOLevel=1 -dpcvars=r.PSOPrecaching=0
 #     → Saved/Shots/shot00..03.png (menu, street, mid-street, first puzzle). Kill the process afterwards (it does not always exit).
@@ -83,12 +87,12 @@ UnrealPak -List /tmp/chk/FallOfOran/Content/Paks/FallOfOran-Android_ASTC.utoc | 
 Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot tour.
 
 ### 4.5 Play-test the APK in the browser (Appetize.io)
-Local emulators are impossible in the sandbox (no `/dev/kvm`, no GPU, no root). The working route is the owner's **Appetize.io** account:
+There is no usable local emulator in the current sandbox (no `/dev/kvm`, no GPU, no root). The owner's **Appetize.io** API is accessible; actual compatibility with this APK still needs verification:
 1. Ask the owner in chat: «أحتاج مفتاح Appetize.io API (الحساب → API Token) لتجربة اللعبة». Store it in a file with mode 600 outside the repo (e.g. `/work/secrets/appetize_token.txt`). It is a secret: never commit, log, or echo it, and remind the owner to rotate it when the session is over.
 2. After §4.4 (pak check passed): `APPETIZE_TOKEN=$(cat /work/secrets/appetize_token.txt) Tools/appetize_upload.sh $OUT/Android_ASTC/FallOfOran-arm64.apk "v2.1 - short note"`
    → prints `publicKey` + play URL. Set `APPETIZE_APP_KEY=<publicKey>` on later uploads to update the same app instead of piling up new ones.
-3. Send the owner the play URL; open it yourself in the browser tool for a smoke run (menu → level 1 → first puzzle) and take screenshots for the report.
-4. Limits: Appetize Android devices are x86 emulators — our arm64 APK runs via ARM translation on Android 11+ (choose a Pixel / Galaxy, Android 12+), so expect low FPS; judge logic/UI, not performance. Free-tier minutes are capped — keep sessions short. Real-phone verdict from the owner still wins.
+3. Open the returned play URL yourself for a smoke run (menu → level 1 → first puzzle). Report installation, launch, rendering, controls and any failure separately. Share the URL with its verified status; do not describe an uploaded but untested app as playable.
+4. Limits: the APK is arm64-only. Emulator architecture, ARM translation, Android version, graphics features and account entitlements can affect compatibility. Check the provider's current supported-device information and test the actual APK; neither API access nor a device name guarantees Unreal will run. Keep sessions short within the owner's plan and do not buy an upgrade without approval. Cloud-device FPS is not a real-phone performance benchmark; the owner's physical-device verdict still wins.
 Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from the sandbox: their signups need CAPTCHA/SMS/verified e-mail and all failed (2026-09).
 
 ## 5. Conventions
@@ -96,7 +100,7 @@ Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from t
 - Gameplay code never talks to the mission directly: emit `FFOGameEvent` through `AFOGameMode::ReportEvent`.
 - Numbers belong in structs/components, not in Tick bodies. Arabic strings are UTF-8 literals via `TEXT("…")`.
 - Assets loaded by path (`LoadObject`) are only cooked because `DefaultGame.ini` has `+DirectoriesToAlwaysCook=(Path="/Game")` — keep it.
-- Commit as small, compiling steps; message in English; tag `vX.Y` when an APK is handed to the owner; never commit credentials
+- Commit small steps and push to `main` early, even before compile, per §0.4; mark unverified changes `[WIP]`/`untested`. Messages in English; tag `vX.Y` only after §4.2 + §4.4 pass; never commit credentials
   (`SecurityToken` in DefaultEngine.ini is auto-regenerated; keys/passwords stay out of the repo).
 
 ## 6. Known pitfalls (learned the hard way)

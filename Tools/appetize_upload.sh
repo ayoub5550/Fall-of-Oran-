@@ -28,5 +28,5 @@ if "publicKey" not in d:
 print("publicKey :", d["publicKey"])
 print("play URL  :", d.get("publicURL") or f"https://appetize.io/app/{d['publicKey']}")
 print("manage URL:", d.get("appURL", ""))
-print("device tip: pick a Pixel/Galaxy with Android 11+ (arm64 APK runs through ARM translation on the x86 emulator; slower than a real phone, fine for smoke tests).")
+print("Status: uploaded, NOT play-tested. Verify arm64 installation, launch, rendering and controls in an actual session before claiming compatibility.")
 PY
