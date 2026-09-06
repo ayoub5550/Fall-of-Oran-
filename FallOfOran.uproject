@@ -1,0 +1,15 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "",
+	"Category": "",
+	"Description": "Fall of Oran - zombie survival horror in Oran, Algeria (UE5, Android)",
+	"Modules": [
+		{ "Name": "FallOfOran", "Type": "Runtime", "LoadingPhase": "Default",
+		  "AdditionalDependencies": [ "Engine", "AIModule" ] }
+	],
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "EditorScriptingUtilities", "Enabled": true },
+		{ "Name": "ModelingToolsEditorMode", "Enabled": false }
+	]
+}

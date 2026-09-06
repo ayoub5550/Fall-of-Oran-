@@ -1,0 +1,74 @@
+{
+ "hero_swat": [
+  {
+   "name": "Ch15_body",
+   "base": "Ch15_1001_Diffuse.png",
+   "normal": "Ch15_1001_Normal.png"
+  },
+  {
+   "name": "Ch15_body1",
+   "base": "Ch15_1002_Diffuse.png",
+   "normal": "Ch15_1002_Normal.png"
+  }
+ ],
+ "hero_swat2": [
+  {
+   "name": "Soldier_body1",
+   "base": "Soldier_Body_diffuse.png",
+   "normal": "Soldier_Body_normal.png"
+  },
+  {
+   "name": "Soldier_head6",
+   "base": "Soldier_head_diffuse.png",
+   "normal": "Soldier_head_normal.png"
+  }
+ ],
+ "z_war": [
+  {
+   "name": "WorldWar_zombie_material",
+   "base": "world_war_zombie_diffuse.png",
+   "normal": "world_war_zombie_normal.png"
+  }
+ ],
+ "z_girl": [
+  {
+   "name": "ZombieGirl_body_Material",
+   "base": "zombie_body_diffuse.png",
+   "normal": "zombie_normal.png"
+  },
+  {
+   "name": "ZombieGirl_Material",
+   "base": "zombie_diffuse.png",
+   "normal": "zombie_normal.png"
+  }
+ ],
+ "z_cop": [
+  {
+   "name": "glass_hair_M",
+   "base": "FuzZombie_diffuse.png",
+   "normal": "FuzZombie_normal.png"
+  },
+  {
+   "name": "body_M",
+   "base": "FuzZombie_body_diffuse.png",
+   "normal": "FuzZombie_normal.png"
+  },
+  {
+   "name": "body_M1",
+   "base": "FuzZombie_diffuse.png",
+   "normal": "FuzZombie_normal.png"
+  }
+ ],
+ "z_parasite": [
+  {
+   "name": "parasitezombie_Material1",
+   "base": "parasiteZombie_body_diffuse.png",
+   "normal": "parasiteZombie_normal.png"
+  },
+  {
+   "name": "parasitezombie_Material",
+   "base": "parasiteZombie_diffuse.png",
+   "normal": "parasiteZombie_normal.png"
+  }
+ ]
+}

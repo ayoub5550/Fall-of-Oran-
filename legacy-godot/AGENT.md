@@ -1,0 +1,115 @@
+# AGENT.md — Oran: The Fall (وهران: السقوط)
+
+Documentation for AI agents (and humans) continuing development of this game.
+Written by Viktor (AI employee) after building v1.0 → v1.1. Read this fully before touching code.
+
+## 1. What this is
+
+A **third-person zombie survival-horror slice** set in Oran, Algeria, styled after **Resident Evil 4 Remake** (over-the-shoulder camera, dark streets, scarce ammo).
+Engine: **Godot 4.3**, mobile renderer. Primary target: **Android phone** — the owner (Ayoub, GitHub `ayoub5550`) uses the Godot editor **on an Android phone, no PC**. All UI text is **Arabic**.
+
+Delivery workflow agreed with the owner: build the full project, ZIP it (`shutil.make_archive`, `zip` CLI may be absent), send it in Slack DM; he imports `project.godot` on the phone. Keep the ZIP around ~100 MB.
+
+## 2. Project layout
+
+```
+project.godot        # Godot 4.3, mobile renderer, landscape
+scenes/main.tscn     # single scene; almost everything is built in code
+scripts/main.gd      # ~600 lines: world gen, game states, HUD, spawning, mission
+scripts/player.gd    # ~370 lines: movement, camera, shooting, health/ammo
+scripts/zombie.gd    # ~200 lines: AI, outfits, LOD, death
+audio/               # procedural WAVs (generated with numpy)
+assets/              # GLB models + PNG/JPG textures (~98 MB)
+concept_art/         # AI-generated concept images (style reference)
+screenshots/         # verification screenshots
+README_AR.md         # Arabic player-facing readme
+```
+
+## 3. Game design (current)
+
+- **Mission**: collect 3 fuel cans (⛽) → port gate unlocks → reach gate → win. Each fuel pickup spawns 2 zombies behind the player.
+- **Combat**: pistol, mag 12 / reserve 36, auto-reload 1.3 s, `GUN_DAMAGE 40`, zombie hp 100 (3 shots). **Aim assist**: camera ray first; on miss, cone check `clampf(1.9 / maxf(d, 1.0), 0.12, 0.35)` picks the **nearest** living zombie in group `"zombies"` within `GUN_RANGE 45`.
+- **Pickups**: medkit +40 hp ×3, ammo +12 ×4.
+- **HUD**: health bar, ammo `12 / 36`, kills ☠, fuel ⛽ `0/3`, Arabic objective label, crosshair (5 px ColorRect, `PRESET_CENTER`, `MOUSE_FILTER_IGNORE`), vignette. Touch fire button is the Arabic word **«نار»** — see pitfalls §7.
+- **States** (`main.gd` enum `GameState`): 0 MENU, 1 PLAYING, 2 DEAD, 3 WON. Key API: `_start_game()`, `_win()`, `kills`, `fuel`, `FUEL_NEEDED`.
+
+## 4. Code architecture facts (verified — do not guess)
+
+- The player is **built in code** in `main._spawn_player()` and stored as `main.player`. There is **no named "Player" node** in the scene tree.
+- `player.gd`: property is **`health`** (not `hp`), reserve ammo is **`reserve`** (not `ammo_reserve`). API: `take_damage(amount)`, `add_ammo(n)`, `add_health(n)`, `try_shoot()`, `pickup_flash()`; signals `died`, `damaged`, `shot_fired`.
+- `zombie.gd`: damage entry point is **`take_hit(damage: float)`** (not `take_damage`). Death emits `killed`, plays fall+fade tween + `zombie_die.wav`.
+- Props are placed with `main._prop(file, pos, roty_deg, target_h)`: loads a GLB, scales by merged AABB to `target_h`, puts feet on ground, `Node3D`, **no collision**.
+- Performance LOD in `zombie.gd`: beyond 45 m — animation paused, velocity zeroed, early return.
+- Player movement uses acceleration smoothing: `accel := 1.0 - exp(-9.0 * delta)` lerp on x/z velocity.
+
+## 5. Art pipeline
+
+- **Character models**: GLB, low-poly rigged (KayKit/Quaternius style). Animations: zombie `Zombie|Zombie{Bite,Crawl,Idle,Run,Walk}`; hero `Human Armature|{Idle,Walk,Run,Death,Punch,Jump,...}`. Blend with `anim.play(name, 0.25)`. **Do not trust the AABB of unposed skinned meshes.**
+- **Outfits via band textures**: character UVs sample a **32-row horizontal palette strip**. Rows ≈ 0–6 skin, 6–11 eyes, 11–17 hair, 17–23 shirt, 23–32 pants (zombie: 28–32 shoes). Generate 128×128 PNGs with numpy (4 px per row) — see `assets/zombie_worker.png` (hi-vis), `zombie_cop.png`, `zombie_civilian.png`, `zombie_medic.png`, `hero_tex.png`. `zombie.gd` picks a random outfit at spawn and tints near-white; hero material albedo stays `Color(1,1,1)`.
+- **Environment textures**: 2K JPG from ambientCG — direct URL `https://ambientcg.com/get?file={Name}_2K-JPG.zip`. Triplanar `StandardMaterial3D` needs no UVs.
+- **Props**: Quaternius packs (Google Drive, `uvx gdown --folder URL`; Drive rate-limits). FBX → GLB with FBX2glTF (`--binary`).
+- **Audio**: all SFX are numpy-generated WAVs in `audio/`.
+
+## 6. Testing & tooling (headless, no GPU needed except screenshots)
+
+- Headless Godot Linux binary: download `Godot_v4.3-stable_linux.x86_64`.
+- After deleting `.godot/`, you **must** run `--headless --import .` (~4 min). "Null instance" errors on scene load = imports missing.
+- Logic tests: a `SceneTree` script run with `-s test.gd --path .` — instantiate `main.tscn`, call `_start_game()`, assert states/kills/health/win. A known-good test flow is in the history: menu 0 → playing 1 → 3× `take_hit(40)` = 1 kill → `take_damage(25)` → `add_ammo(12)` → `fuel = 3; _win()` → state 3.
+- Screenshots: `xvfb-run -a godot --rendering-driver opengl3 -s shots.gd --path .` then `get_viewport().get_texture().get_image().save_png(...)`.
+- Run long headless jobs with **output redirected to a file** — Godot can hang writing to a dead pipe.
+- Filter log noise: `grep -v "Parameter\|null instance\|servers/rendering\|drivers/dummy"`.
+
+## 7. Pitfalls (learned the hard way)
+
+1. **Emoji in Godot UI**: 🔫 etc. render as tofu with the default font. Use Arabic text («نار») for buttons; ☠ ⛽ happen to render fine.
+2. Use `_input`, not `_unhandled_input`, for taps that must work over UI.
+3. GDScript `:=` type inference fails on Variant loop variables — annotate.
+4. Owner's phone-only workflow: never require command line, plugins, MCP, or PC-only steps from him.
+5. Keep every repo file < 100 MB (GitHub hard limit); the whole assets dir is fine as-is.
+6. The owner writes **Arabic** — reply and document player-facing text in Arabic.
+
+## 7b. v1.2 realism pass (weather + facades)
+
+- **Colonial facades**: procedural 512px tiles (2 floors × 2 shuttered windows ≈ 6×6 m) generated with numpy — `assets/tex/facade_{a,b}_color.jpg` + matching `_emis.jpg` emission maps (warm lit windows). Applied triplanar with `uv1_scale = 1/6`; ~70% of buildings use them, `emission_energy_multiplier 1.1`. ambientCG has **no** old-town facades (all modern glass) — that's why these are procedural.
+- **Road**: ambientCG `Road007` (lane markings) on a `PlaneMesh` strip over the asphalt, `uv1_scale.y = length/14`, roughness ~0.5 for rain-slick look. Puddle quads: `metallic 1.0, roughness 0.05`, alpha texture `assets/puddle.png`.
+- **Weather**: `_build_weather()` in main.gd — GPUParticles3D rain (650 quads, gravity −46, `BILLBOARD_FIXED_Y`, visibility AABB ±22 m) **parented to the player**; looping `audio/rain.wav`; `_lightning(delta)` in `_process` flashes the `moon` DirectionalLight then plays `audio/thunder.wav` after 0.5–1.4 s. Rain/thunder WAVs are numpy-generated.
+- **Blood**: `assets/blood_decal.png` (RGBA splat) — static stains on the road + `zombie.gd::_spawn_blood_pool()` spreads a pool under each corpse (tween scale 0.15→1.0 over 2.2 s, added to zombie's parent so it survives `queue_free`).
+- Decals are plain `PlaneMesh` quads at staggered heights (0.02–0.05) — the `Decal` node is unreliable on the mobile renderer. Keep road plane at y=0.012, puddles ~0.022, blood ~0.03.
+- **Screenshot-test tip**: set `player.health = 1000000.0` before teleport-based captures, otherwise zombies kill the player mid-shoot.
+
+## 7c. v1.3 cinematic pass (sky + palms + beam)
+
+- **Night sky**: 2048×1024 equirect `assets/tex/sky_pano.jpg` via `PanoramaSkyMaterial` (`BG_SKY`, `background_energy_multiplier 1.12`). Generated with numpy/PIL (`temp/gen_sky.py` pattern): gradient sky, blurred-noise clouds, stars, smooth moon halo (**exponential falloff — never draw discrete alpha circles, they band into ugly rings in-game**), Santa Cruz hill + fort silhouette with lit windows, port cranes + ship, city-light horizon strip, sea moon-reflection, gaussian dither σ2.2 vs banding.
+- `env.sky_rotation = Vector3(0, PI, 0)` puts the moon down the street (−Z). Verify moon azimuth empirically with an 8-yaw screenshot scan; don't trust pano-x math.
+- **Palms**: procedural in `main.gd::_palm()` — 5 bent trunk cylinders + 9 frond quads. Frond texture runs **horizontally** (base left): each frond is a pivot Node3D at the crown with `rotation_degrees = (0, i*40±14, −38..−14)` (Z = droop) and a child QuadMesh 3.4×1.5 with `center_offset.x = 1.55`. Never rotate the quad Z=90 and translate +Y — that renders vertical dark planes.
+- **Flashlight beam**: fake volumetric — additive unshaded cone (CylinderMesh top 0.03 / bottom 1.7 / h 12, no caps, alpha 0.028, cull off) child of the SpotLight at z −6.4, rot X −90. Mobile renderer has **no volumetric fog / SSR / SDFGI** (verified via docs); SpotLight shadows, depth fog, ReflectionProbe, PanoramaSky all work.
+- **Film grain**: animated ColorRect canvas shader (blend_add, strength 0.045) under the vignette in `_build_ui`.
+- 16 zombies now (5 extra spawn spots at z −70..−86); logic tests expect 16.
+- Exit-gate green panel toned down (emissive 0.05,0.28,0.10, omni 0.7) — bright green looked arcade-y.
+
+## 7d. v1.4 realistic characters (Mixamo rigs + runtime retargeting)
+
+**Why**: owner rejected the low-poly Quaternius characters ("مجرد مضلعات"). Realistic rigged humans that are downloadable *without a login* are rare; these worked:
+- `assets/chars/zombie_girl.glb`, `zombie_jill.glb` — Mixamo zombie characters found as FBX in public GitHub repos (`angiecarojas/Zombie-Mixamo_ThreeJS`), converted with FBX2glTF `--embed`. Their body material exports with alpha 0 → **invisible** until `AnimLib.prep_materials()` disables transparency.
+- `assets/chars/hero_soldier.glb` — three.js `Soldier.glb` (Mixamo "Vanguard"), faces −Z already (rotation.y = 0, unlike Quaternius which needed PI).
+- `assets/chars/anim_*.glb` — Mixamo clips (idle/walk/run from the same repo, attack/death/idle/walk from `kdessaik/Last-Stand…`). Bone names had `mixamorig:` prefixes → stripped offline with pygltflib (node name edit) so every rig shares plain names (`Hips`, `Spine`, …).
+- Rejected: `mremireh_o_desbiens` (cartoon), NewPunch ShirtlessZombie (UE4 rig, FBX 7.7 → FBX2glTF exports no mesh; Godot ufbx imports it but bone names don't match Mixamo). CGTrader/Sketchfab/Mixamo all need logins.
+
+**`scripts/anim_lib.gd`** (`class_name AnimLib`, static):
+- `add_clip(target_ap, skel, glb_path, clip_name, loop)` — loads the anim GLB, copies tracks onto the target skeleton by bone name. Drops scale tracks and all position tracks except `Hips` (scaled by rest-hips-height ratio → fixes cm-vs-m exports). Rotations are re-expressed as `dst_rest * src_rest⁻¹ * q` so rigs with different rest poses still work.
+- **Crash pitfall**: instances of one PackedScene share the same `AnimationLibrary`. Adding a clip into the shared library segfaults the other instances (their playing animation is freed). `add_clip` duplicates the library once per player (meta `animlib_private`). Symptom was a signal-11 with 2+ zombies, none with 1.
+- `prep_materials(model, tint)` — duplicates every surface material, disables transparency, applies tint, roughness 0.8.
+
+**Gameplay wiring**: zombie.gd clips `idle/walk/run/bite/death`; death plays the clip then sinks after 3.2 s. Player clips `Idle/Walk/Run` (native) + `Death` (retargeted). Zombie scales girl 0.85 / jill 0.98; hero 0.95. Red eye omni reduced to 0.1 (it tinted the realistic skin red). Player has a soft blue fill OmniLight (0.9, range 3.2) so his back reads in the dark. `crawler` flag now just means a slower shambler (no crawl clip).
+
+## 8. Roadmap ideas (not committed)
+
+- More districts of Oran (Sidi El Houari alleys, the port, Santa Cruz fort — see `concept_art/`)
+- Realistic buildings/cars to match the v1.4 characters (owner will likely ask next).
+- Melee weapon + knife parry (RE4-style), weapon variety (shotgun), inventory/attaché case.
+- Zombie variety: crawler (anim exists: `Zombie|ZombieCrawl`), runner, armored cop.
+- Save system, chapters, boss fight at the port gate.
+- Real Arabic voice lines (TTS), music layers by threat level.
+- Mobile perf: bake light, pool zombies, reduce shadow casters.
+
+— Viktor, 2026-09-02

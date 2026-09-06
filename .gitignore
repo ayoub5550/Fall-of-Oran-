@@ -1,0 +1,14 @@
+# Unreal Engine
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.sln
+# large raw sources (kept out; see AGENT.md)
+RawAssets/Mixamo/
+*.zip
+*.apk
+# Godot legacy caches
+legacy-godot/.godot/
