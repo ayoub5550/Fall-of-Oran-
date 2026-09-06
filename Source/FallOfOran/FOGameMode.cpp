@@ -9,6 +9,7 @@
 #include "Mission/FOMissionComponent.h"
 #include "Puzzles/FOKeypadPuzzle.h"
 #include "Mission/FOObjective.h"
+#include "Components/FOHealthComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
@@ -260,7 +261,8 @@ void AFOGameMode::TickShots(float Dt)
 	{
 		const FFOPuzzleDef& P = Level->Puzzles[0];
 		const FVector Face = FRotator(0, P.Yaw, 0).Vector() * -1.f; // puzzle front (-X local)
-		Shots.Add({ P.Location + Face * 350.f + FVector(0, 0, 100.f), (-Face).Rotation(), false });
+		const FVector Side = FVector::CrossProduct(Face, FVector::UpVector);
+		Shots.Add({ P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f), (P.Location + FVector(0, 0, 150.f) - (P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f))).Rotation(), false });
 	}
 	int32 Num = Shots.Num();
 	{ int32 Max = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotMax="), Max) && Max > 0) Num = FMath::Min(Num, Max); }
@@ -268,6 +270,7 @@ void AFOGameMode::TickShots(float Dt)
 	if (ShotIndex >= Num) { FPlatformMisc::RequestExit(false); return; }
 	const FShot& S = Shots[ShotIndex];
 	if (!S.bMenu && State == EFOState::Menu) StartGame();
+	if (AFOCharacter* P0 = Player()) if (P0->HealthComp) P0->HealthComp->bInvulnerable = true; // proof shots without damage flash
 	if (AFOCharacter* P = Player())
 		if (ShotIndex > 0)
 		{

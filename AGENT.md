@@ -53,7 +53,7 @@ FOHud.*                Slate HUD: health, objectives, hint banner, note panel, i
 ## 3. How to…
 **Add a level** — append an `FFOLevelDef` in `FOLevelRegistry.cpp::BuildCampaign()`: seed, street length, zombie count/runner chance/HpMul,
 lighting preset, `Items` (fuel/health/ammo/notes with street coordinates: X along the street 0..StreetLength, Y across −550..550, Z 40–60),
-`Puzzles`, and `Stages` (sequential; objectives inside a stage are parallel). Test with `-FOLevel=<index>`.
+`Puzzles` (Yaw: the puzzle front is its local −X; Yaw −90 faces +Y, Yaw 0 faces the approaching player), and `Stages` (sequential; objectives inside a stage are parallel). Test with `-FOLevel=<index>`.
 
 **Add an objective type** — add an enum value in `EFOObjectiveType`, handle it in `UFOObjective::Matches`, emit the matching `FFOGameEvent` from gameplay code via `GameMode->ReportEvent`.
 
