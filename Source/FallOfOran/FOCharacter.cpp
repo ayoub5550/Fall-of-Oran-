@@ -96,18 +96,9 @@ AFOCharacter::AFOCharacter()
 		GetMesh()->bCastDynamicShadow = true;
 		GetMesh()->bReceivesDecals = false;
 	}
-	auto LoadAnim = [this](EFOAnim A, const TCHAR* Path) {
-		if (UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, Path)) Anims.Add(A, S);
-	};
-	LoadAnim(EFOAnim::Idle, TEXT("/Game/Chars/Hero/Anims/h_idle.h_idle"));
-	LoadAnim(EFOAnim::Walk, TEXT("/Game/Chars/Hero/Anims/h_walk.h_walk"));
-	LoadAnim(EFOAnim::Run, TEXT("/Game/Chars/Hero/Anims/h_run.h_run"));
-	LoadAnim(EFOAnim::Shoot, TEXT("/Game/Chars/Hero/Anims/h_shoot.h_shoot"));
-	LoadAnim(EFOAnim::Reload, TEXT("/Game/Chars/Hero/Anims/h_reload.h_reload"));
-	LoadAnim(EFOAnim::Hit, TEXT("/Game/Chars/Hero/Anims/h_hit.h_hit"));
-	LoadAnim(EFOAnim::Death, TEXT("/Game/Chars/Hero/Anims/h_death.h_death"));
-	LoadAnim(EFOAnim::InjuredIdle, TEXT("/Game/Chars/Hero/Anims/h_injured_idle.h_injured_idle"));
-	LoadAnim(EFOAnim::InjuredWalk, TEXT("/Game/Chars/Hero/Anims/h_injured_walk.h_injured_walk"));
+	// NOTE: animation clips are loaded in BeginPlay (see LoadAnims): loading UAnimSequence in the
+	// constructor happens during CDO creation at module startup, before the animation systems are
+	// ready -> clips ended up without usable data and the hero stood in T-pose.
 
 	GunSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/gunshot.gunshot"));
 	ClickSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/click.click"));
@@ -143,9 +134,28 @@ AFOCharacter::AFOCharacter()
 	IMC->MapKey(IA_Sprint, EKeys::Gamepad_LeftThumbstick);
 }
 
+void AFOCharacter::LoadAnims()
+{
+	if (Anims.Num() > 0) return;
+	ON_SCOPE_EXIT { UE_LOG(LogTemp, Display, TEXT("FOCharacter: %d hero anims loaded"), Anims.Num()); };
+	auto LoadAnim = [this](EFOAnim A, const TCHAR* Path) {
+		if (UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, Path)) Anims.Add(A, S);
+	};
+	LoadAnim(EFOAnim::Idle, TEXT("/Game/Chars/Hero/Anims/h_idle.h_idle"));
+	LoadAnim(EFOAnim::Walk, TEXT("/Game/Chars/Hero/Anims/h_walk.h_walk"));
+	LoadAnim(EFOAnim::Run, TEXT("/Game/Chars/Hero/Anims/h_run.h_run"));
+	LoadAnim(EFOAnim::Shoot, TEXT("/Game/Chars/Hero/Anims/h_shoot.h_shoot"));
+	LoadAnim(EFOAnim::Reload, TEXT("/Game/Chars/Hero/Anims/h_reload.h_reload"));
+	LoadAnim(EFOAnim::Hit, TEXT("/Game/Chars/Hero/Anims/h_hit.h_hit"));
+	LoadAnim(EFOAnim::Death, TEXT("/Game/Chars/Hero/Anims/h_death.h_death"));
+	LoadAnim(EFOAnim::InjuredIdle, TEXT("/Game/Chars/Hero/Anims/h_injured_idle.h_injured_idle"));
+	LoadAnim(EFOAnim::InjuredWalk, TEXT("/Game/Chars/Hero/Anims/h_injured_walk.h_injured_walk"));
+}
+
 void AFOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	LoadAnims();
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (ULocalPlayer* LP = PC->GetLocalPlayer())
@@ -207,9 +217,10 @@ void AFOCharacter::OnTouchEnd(ETouchIndex::Type Idx, FVector) { if ((int32)Idx =
 
 void AFOCharacter::PlayAnim(EFOAnim A, bool bLoop, float Speed)
 {
-	if (CurrentAnim == A && OneShotTimer <= 0.f && bLoop) return;
+	if (bAnimStarted && CurrentAnim == A && OneShotTimer <= 0.f && bLoop) return;
 	UAnimSequence** S = Anims.Find(A);
 	if (!S || !*S) return;
+	bAnimStarted = true;
 	CurrentAnim = A;
 	GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	GetMesh()->PlayAnimation(*S, bLoop);

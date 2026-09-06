@@ -50,7 +50,9 @@ public:
 
 	// Animation (played directly on the skeletal mesh, no AnimBP needed headless)
 	UPROPERTY() TMap<EFOAnim, UAnimSequence*> Anims;
+	void LoadAnims();
 	EFOAnim CurrentAnim = EFOAnim::Idle;
+	bool bAnimStarted = false; // PlayAnim must not early-out before the first clip is playing
 	float OneShotTimer = 0.f;
 	void PlayAnim(EFOAnim A, bool bLoop, float Speed = 1.f);
 

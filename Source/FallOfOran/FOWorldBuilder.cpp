@@ -207,8 +207,8 @@ void AFOWorldBuilder::BuildLighting()
 	{
 		Moon->SetMobility(EComponentMobility::Movable);
 		UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Moon->GetLightComponent());
-		D->SetIntensity(0.45f);
-		D->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
+		D->SetIntensity(6.0f);
+		D->SetLightColor(FLinearColor(0.6f, 0.7f, 0.92f));
 		D->SetCastShadows(true);
 		D->SetDynamicShadowDistanceMovableLight(6000.f);
 		D->SetShadowAmount(0.85f);
@@ -219,17 +219,17 @@ void AFOWorldBuilder::BuildLighting()
 		USkyLightComponent* SC = Sky->GetLightComponent();
 		SC->SetMobility(EComponentMobility::Movable);
 		SC->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap; // no capture needed headless; falls back to color
-		SC->SetIntensity(0.35f);
+		SC->SetIntensity(4.5f);
 		SC->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
-		SC->SetLowerHemisphereColor(FLinearColor(0.02f, 0.02f, 0.03f));
+		SC->SetLowerHemisphereColor(FLinearColor(0.2f, 0.2f, 0.25f));
 	}
 	AExponentialHeightFog* Fog = W->SpawnActor<AExponentialHeightFog>(FVector(0, 0, 0), FRotator::ZeroRotator);
 	if (Fog)
 	{
 		UExponentialHeightFogComponent* F = Fog->GetComponent();
-		F->SetFogDensity(0.045f);
+		F->SetFogDensity(0.014f);
 		F->SetFogHeightFalloff(0.35f);
-		F->SetFogInscatteringColor(FLinearColor(0.045f, 0.055f, 0.085f));
+		F->SetFogInscatteringColor(FLinearColor(0.10f, 0.12f, 0.18f));
 		F->SetStartDistance(300.f);
 		F->SetFogMaxOpacity(0.96f);
 		F->SetDirectionalInscatteringColor(FLinearColor(0.35f, 0.25f, 0.12f));
@@ -239,13 +239,11 @@ void AFOWorldBuilder::BuildLighting()
 	if (PP)
 	{
 		PP->bUnbound = true;
-		PP->Settings.bOverride_AutoExposureMethod = true; PP->Settings.AutoExposureMethod = AEM_Manual;
-		PP->Settings.bOverride_AutoExposureBias = true; PP->Settings.AutoExposureBias = 1.6f;
+		// NOTE: do NOT override exposure (AEM_Manual/AutoExposureBias) or colour grading here.
+		// On the mobile ES3.1 path with r.DefaultFeature.AutoExposure=False those overrides
+		// blacked out the whole frame (verified with -FOShotDiag). Brightness is tuned via light intensities instead.
 		PP->Settings.bOverride_BloomIntensity = true; PP->Settings.BloomIntensity = 0.55f;
 		PP->Settings.bOverride_BloomThreshold = true; PP->Settings.BloomThreshold = 0.6f;
-		PP->Settings.bOverride_SceneColorTint = true; PP->Settings.SceneColorTint = FLinearColor(0.92f, 0.96f, 1.05f);
-		PP->Settings.bOverride_ColorGamma = true; PP->Settings.ColorGamma = FVector4(0.95f, 0.97f, 1.02f, 1.f);
-		PP->Settings.bOverride_FilmToe = true; PP->Settings.FilmToe = 0.62f;
 	}
 }
 
@@ -371,7 +369,7 @@ void AFOWorldBuilder::BuildBuilding(float X0, float W, int32 Side, int32 Index)
 				Box(FVector(Wx - WinW * 0.5f - 22.f, FaceY + Out * 4.f, Zb + WinH * 0.5f), FVector(40.f, 6.f, WinH), Shutter, FRotator::ZeroRotator, false);
 				Box(FVector(Wx + WinW * 0.5f + 22.f, FaceY + Out * 4.f, Zb + WinH * 0.5f), FVector(40.f, 6.f, WinH), Shutter, FRotator::ZeroRotator, false);
 			}
-			if (bLit) Light(FVector(Wx, FaceY + Out * 60.f, Zb + WinH * 0.6f), FLinearColor(1.f, 0.72f, 0.42f), 9.f, 420.f);
+			if (bLit) Light(FVector(Wx, FaceY + Out * 60.f, Zb + WinH * 0.6f), FLinearColor(1.f, 0.72f, 0.42f), 24.f, 560.f);
 			// wrought-iron balcony on the first two floors
 			if (bBalconies && f < 2)
 			{
@@ -398,7 +396,7 @@ void AFOWorldBuilder::BuildBuilding(float X0, float W, int32 Side, int32 Index)
 		const bool bNeon = Rng.FRand() < 0.35f;
 		Box(FVector(Sx, FaceY + Out * 10.f, 350.f), FVector(ShopW - 70.f, 20.f, 80.f), Flat(FLinearColor(0.08f, 0.07f, 0.06f), 0.8f), FRotator::ZeroRotator, false);
 		Quad(FVector(Sx, FaceY + Out * 21.f, 350.f), FVector2D(ShopW - 80.f, 72.f), UVTex(*SignPath, FLinearColor::White, bNeon ? 1.6f : 0.15f, false, 0.6f), FRotator(Side > 0 ? 90.f : -90.f, 0, 0));
-		if (bNeon) Light(FVector(Sx, FaceY + Out * 90.f, 330.f), FLinearColor(1.f, 0.8f, 0.55f), 14.f, 520.f);
+		if (bNeon) Light(FVector(Sx, FaceY + Out * 90.f, 330.f), FLinearColor(1.f, 0.8f, 0.55f), 36.f, 700.f);
 		// awning on some shops
 		if (Rng.FRand() < 0.4f)
 			Box(FVector(Sx, FaceY + Out * 70.f, 305.f), FVector(ShopW - 100.f, 140.f, 6.f), Flat(FLinearColor(0.35f, 0.12f, 0.1f), 0.95f), FRotator(Side > 0 ? -18.f : 18.f, 0, 0), false);
@@ -427,7 +425,7 @@ void AFOWorldBuilder::BuildStreetFurniture()
 		const FVector Head(X, Y - Side * 215.f, 730.f);
 		Box(Head, FVector(60.f, 30.f, 22.f), Iron, FRotator::ZeroRotator, false);
 		Box(Head - FVector(0, 0, 14.f), FVector(50.f, 22.f, 8.f), LampGlass, FRotator::ZeroRotator, false);
-		UPointLightComponent* L = Light(Head - FVector(0, 0, 40.f), FLinearColor(1.f, 0.66f, 0.3f), 55.f, 1500.f, true);
+		UPointLightComponent* L = Light(Head - FVector(0, 0, 40.f), FLinearColor(1.f, 0.66f, 0.3f), 320.f, 2200.f, true);
 		Lamps.Add(L);
 		LampFlicker.Add(Rng.FRand() < 0.5f ? Rng.FRandRange(0.5f, 1.f) : 0.f);
 	}
@@ -545,7 +543,7 @@ void AFOWorldBuilder::BuildExitGate()
 {
 	const float Gx = StreetLength + 200.f;
 	UMaterialInstanceDynamic* Dark = Flat(FLinearColor(0.05f, 0.05f, 0.05f), 0.6f, 0.5f);
-	UMaterialInstanceDynamic* Panel = Flat(FLinearColor(0.03f, 0.06f, 0.04f), 0.6f, 0.f, FLinearColor(0.05f, 0.28f, 0.1f) * 3.f);
+	UMaterialInstanceDynamic* Panel = Flat(FLinearColor(0.03f, 0.06f, 0.04f), 0.6f, 0.f, FLinearColor(0.05f, 0.28f, 0.1f) * 1.2f);
 	Box(FVector(Gx, 0, 500.f), FVector(40.f, 450.f, 20.f), Dark);
 	Box(FVector(Gx, -220.f, 250.f), FVector(40.f, 40.f, 500.f), Dark);
 	Box(FVector(Gx, 220.f, 250.f), FVector(40.f, 40.f, 500.f), Dark);
@@ -645,21 +643,21 @@ void AFOWorldBuilder::Tick(float Dt)
 		{
 			const float N = FMath::PerlinNoise1D(T * 6.f + i * 13.7f);
 			const float F = N > 0.55f * LampFlicker[i] ? 0.15f : 1.f;
-			Lamps[i]->SetIntensity(55.f * F);
+			Lamps[i]->SetIntensity(320.f * F);
 		}
 	// Lightning: flash the moon, thunder follows
 	LightningT -= Dt;
 	if (LightningT <= 0.f && Moon)
 	{
 		LightningT = Rng.FRandRange(9.f, 22.f);
-		Moon->GetLightComponent()->SetIntensity(6.f);
+		Moon->GetLightComponent()->SetIntensity(28.f);
 		Moon->GetLightComponent()->SetLightColor(FLinearColor(0.8f, 0.85f, 1.f));
 		ThunderDelay = Rng.FRandRange(0.5f, 1.4f);
 	}
 	else if (Moon && Moon->GetLightComponent()->Intensity > 0.45f)
 	{
-		Moon->GetLightComponent()->SetIntensity(FMath::Max(0.45f, Moon->GetLightComponent()->Intensity - Dt * 40.f));
-		if (Moon->GetLightComponent()->Intensity <= 0.46f) Moon->GetLightComponent()->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
+		Moon->GetLightComponent()->SetIntensity(FMath::Max(6.0f, Moon->GetLightComponent()->Intensity - Dt * 40.f));
+		if (Moon->GetLightComponent()->Intensity <= 6.05f) Moon->GetLightComponent()->SetLightColor(FLinearColor(0.55f, 0.65f, 0.9f));
 	}
 	if (ThunderDelay >= 0.f)
 	{

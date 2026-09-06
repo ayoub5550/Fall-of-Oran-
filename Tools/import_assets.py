@@ -292,8 +292,11 @@ def build_m_sky():
 def build_m_char():
     mat = new_material("M_Char")
     mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("used_with_skeletal_mesh", True)  # instances are applied to SkeletalMeshes
     base = tex_param(mat, "BaseColor", None, -600, -200)
-    nrm = tex_param(mat, "Normal", None, -600, 100, unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    # Default must be a real normal map: a Color default texture fails the ES3.1 compile -> DefaultMaterial in game.
+    nrm = tex_param(mat, "Normal", unreal.load_asset("/Engine/EngineMaterials/DefaultNormal"), -600, 100,
+                    unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     tint = vector_param(mat, "Tint", unreal.LinearColor(1, 1, 1, 1), -600, -400)
     mul = expr(mat, unreal.MaterialExpressionMultiply, -350, -250)
     connect(base, "RGB", mul, "A")

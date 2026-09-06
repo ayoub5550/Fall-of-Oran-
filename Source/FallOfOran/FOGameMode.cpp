@@ -16,6 +16,9 @@
 #include "ShaderCompiler.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/Paths.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/LightComponent.h"
+#include "Engine/PostProcessVolume.h"
 
 AFOGameMode::AFOGameMode()
 {
@@ -147,8 +150,11 @@ void AFOGameMode::TickShots(float Dt)
 		{ FVector(1500.f, -300.f, 100.f), FRotator(0,  20, 0), false },  // first fuel can area
 		{ FVector(4300.f,  200.f, 100.f), FRotator(0, -25, 0), false },  // mid-street cars
 		{ FVector(7500.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // port gate
+		{ FVector( 300.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // diag 5: street, PP colour overrides off
+		{ FVector( 300.f,    0.f, 100.f), FRotator(0,   0, 0), false },  // diag 6: street, PP exposure overrides off too
 	};
-	const int32 Num = UE_ARRAY_COUNT(Shots);
+	int32 Num = UE_ARRAY_COUNT(Shots);
+	{ int32 Max = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotMax="), Max) && Max > 0) Num = FMath::Min(Num, Max); }
 	// Give each view ~6 s to stream/settle before capturing.
 	if (ShotClock < 6.f) return;
 	if (ShotIndex >= Num) { FPlatformMisc::RequestExit(false); return; }
@@ -162,8 +168,33 @@ void AFOGameMode::TickShots(float Dt)
 			if (APlayerController* PC = Cast<APlayerController>(P->GetController())) PC->SetControlRotation(S.Rot);
 		}
 	}
-	// Capture on the following frame so the teleport is visible; simple approach: alternate frames.
+	// Optional per-shot diagnostics (-FOShotDiag): 1 baseline, 2 fog off, 3 +post-process off, 4 +bright moon.
 	static bool bArmed = false;
+	if (!bArmed && FParse::Param(FCommandLine::Get(), TEXT("FOShotDiag")) && GEngine)
+	{
+		UWorld* W = GetWorld();
+		if (ShotIndex == 2) GEngine->Exec(W, TEXT("r.Fog 0"));
+		if (ShotIndex == 3) GEngine->Exec(W, TEXT("showflag.postprocessing 0"));
+		if (ShotIndex == 4)
+		{
+			GEngine->Exec(W, TEXT("showflag.postprocessing 1"));
+			for (TActorIterator<AFOWorldBuilder> It(W); It; ++It)
+				if (It->Moon) { It->Moon->GetLightComponent()->SetIntensity(28.f); It->LightningT = 1e9f; }
+		}
+		if (ShotIndex == 5 || ShotIndex == 6)
+		{
+			for (TActorIterator<AFOWorldBuilder> It(W); It; ++It)
+				if (It->Moon) It->Moon->GetLightComponent()->SetIntensity(6.0f);
+			for (TActorIterator<APostProcessVolume> It(W); It; ++It)
+			{
+				FPostProcessSettings& PS = It->Settings;
+				PS.bOverride_SceneColorTint = false; PS.bOverride_ColorGamma = false; PS.bOverride_FilmToe = false;
+				if (ShotIndex == 6) { PS.bOverride_AutoExposureMethod = false; PS.bOverride_AutoExposureBias = false; }
+			}
+		}
+		UE_LOG(LogFO, Display, TEXT("Shot diag variant %d applied"), ShotIndex);
+	}
+	// Capture on the following frame so the teleport is visible; simple approach: alternate frames.
 	if (!bArmed) { bArmed = true; return; }
 	bArmed = false;
 	const FString Dir = FPaths::ProjectSavedDir() / TEXT("Shots");
