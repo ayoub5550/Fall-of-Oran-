@@ -96,7 +96,10 @@ UE_ROOT=/work/repos/unrealengine "$PROJ/Tools/package_android.sh" "$OUT"
 # Logs, PID and final exit status: Saved/Automation/Android-<timestamp>/.
 # Building UnrealEditor alone does not build ShaderCompileWorker or UnrealPak; UAT builds those tools as needed.
 #     THEN VERIFY THE PAK before sending anything to the owner:
-unzip -o $OUT/Android_ASTC/FallOfOran-arm64.apk assets/main.obb.png -d /tmp/chk && unzip -o /tmp/chk/assets/main.obb.png '*.utoc' -d /tmp/chk
+python3 "$PROJ/Tools/verify_android_apk.py" "$OUT/Android_ASTC/FallOfOran-arm64.apk" --output "$OUT/verification"
+# Checks ZIP/OBB integrity, package/version, arm64 native library, ALL project assets, and Arabic TTF.
+# Manual inspection fallback must extract .ucas DATA too, not only the .utoc index:
+unzip -o $OUT/Android_ASTC/FallOfOran-arm64.apk assets/main.obb.png -d /tmp/chk && unzip -o /tmp/chk/assets/main.obb.png '*.utoc' '*.ucas' '*.pak' -d /tmp/chk
 UnrealPak -List /tmp/chk/FallOfOran/Content/Paks/FallOfOran-Android_ASTC.utoc | grep -c 'Zombies\|Anims\|Props'   # must be > 0 (was 0 in v1.6)
 ```
 Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot tour.
@@ -105,7 +108,7 @@ Runtime flags: `-FOLevel=N` (0-based), `-FOShots` (+`-FOShotMax=N`) screenshot t
 There is no usable local emulator in the current sandbox (no `/dev/kvm`, no GPU, no root). The owner's **Appetize.io** API is accessible; actual compatibility with this APK still needs verification:
 1. Ask the owner in chat: «أحتاج مفتاح Appetize.io API (الحساب → API Token) لتجربة اللعبة». Store it in a file with mode 600 outside the repo (e.g. `/work/secrets/appetize_token.txt`). It is a secret: never commit, log, or echo it, and remind the owner to rotate it when the session is over.
 2. After §4.4 (pak check passed): `APPETIZE_TOKEN=$(cat /work/secrets/appetize_token.txt) Tools/appetize_upload.sh $OUT/Android_ASTC/FallOfOran-arm64.apk "v2.1 - short note"`
-   → prints `publicKey` + play URL. Set `APPETIZE_APP_KEY=<publicKey>` on later uploads to update the same app instead of piling up new ones.
+   → prints `publicKey` + play URL. Set `APPETIZE_APP_KEY=<publicKey>` on later uploads to update this same Fall of Oran app instead of piling up new ones. Check the existing app's bundle ID first: this account also contains another game, so never overwrite an unrelated app.
 3. Open the returned play URL yourself for a smoke run (menu → level 1 → first puzzle). Report installation, launch, rendering, controls and any failure separately. Share the URL with its verified status; do not describe an uploaded but untested app as playable.
 4. Limits: the APK is arm64-only. Emulator architecture, ARM translation, Android version, graphics features and account entitlements can affect compatibility. Check the provider's current supported-device information and test the actual APK; neither API access nor a device name guarantees Unreal will run. Keep sessions short within the owner's plan and do not buy an upgrade without approval. Cloud-device FPS is not a real-phone performance benchmark; the owner's physical-device verdict still wins.
 Do not try Samsung Remote Test Lab, BrowserStack, Genymotion or Redfinger from the sandbox: their signups need CAPTCHA/SMS/verified e-mail and all failed (2026-09).
