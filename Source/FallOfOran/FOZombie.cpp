@@ -70,7 +70,14 @@ AFOZombie::AFOZombie()
 void AFOZombie::BeginPlay()
 {
 	Super::BeginPlay();
-	Hp *= HpMul;
+	bHeavy = Variant == 2 && !bRunner;
+	Hp = (bHeavy ? 160.f : 100.f) * HpMul;
+	ChaseSpeed = bHeavy ? 140.f : (bRunner ? 330.f : 190.f);
+	MeleeDamage = bHeavy ? 30.f : AttackDamage;
+	MeleeCooldown = bHeavy ? 1.9f : AttackCooldown;
+	WindupSeconds = bHeavy ? 0.65f : 0.45f;
+	UE_LOG(LogFO, Display, TEXT("Zombie role: %s hp=%.0f speed=%.0f"),
+		bHeavy ? TEXT("heavy") : (bRunner ? TEXT("runner") : TEXT("walker")), Hp, ChaseSpeed);
 	Anims = *SharedAnims();
 	if (USkeletalMesh* SK = LoadObject<USkeletalMesh>(nullptr, ZombieMeshPaths[FMath::Clamp(Variant, 0, 3)]))
 	{
@@ -128,6 +135,16 @@ void AFOZombie::Die(AFOCharacter* Killer)
 	if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>()) GM->ReportEvent(FFOGameEvent(EFOGameEvent::ZombieKilled, FName(*FString::FromInt(Variant))));
 }
 
+bool AFOZombie::HasAttackLine() const
+{
+	if (!IsValid(Target)) return false;
+	FHitResult Hit;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(ZombieMelee), false, this);
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit,
+		GetActorLocation(), Target->GetActorLocation(), ECC_Visibility, Q);
+	return !bHit || Hit.GetActor() == Target;
+}
+
 void AFOZombie::Tick(float Dt)
 {
 	Super::Tick(Dt);
@@ -147,6 +164,17 @@ void AFOZombie::Tick(float Dt)
 	FVector To = Target->GetActorLocation() - GetActorLocation();
 	To.Z = 0.f;
 	const float Dist = To.Size();
+	// Commit damage only after a readable wind-up, rechecking range and cover.
+	// Stepping away or breaking sight during the animation avoids the strike.
+	if (bAttackPending)
+	{
+		AttackWindup -= Dt;
+		if (AttackWindup <= 0.f)
+		{
+			bAttackPending = false;
+			if (Dist <= AttackRange && HasAttackLine()) Target->TakeHit(MeleeDamage);
+		}
+	}
 
 	// Perf LOD: far zombies sleep (no AI, no anim ticks)
 	if (Dist > 4500.f)
@@ -170,17 +198,20 @@ void AFOZombie::Tick(float Dt)
 			PlayAnim(EZAnim::Scream, false, 1.f);
 			if (ScreamSound) UGameplayStatics::PlaySoundAtLocation(this, ScreamSound, GetActorLocation());
 		}
-		const float Speed = bRunner ? 330.f : 190.f;
+		const float Speed = ChaseSpeed;
 		GetCharacterMovement()->MaxWalkSpeed = Speed;
-		if (OneShotTimer <= 0.f) Move = To.GetSafeNormal();
+		if (OneShotTimer <= 0.f && !bAttackPending) Move = To.GetSafeNormal();
 		if (Dist > 10.f) SetActorRotation(FMath::RInterpTo(GetActorRotation(), To.Rotation(), Dt, 6.f));
 		AttackTimer -= Dt;
-		if (Dist <= AttackRange && AttackTimer <= 0.f)
+		if (Dist <= AttackRange && AttackTimer <= 0.f && !bAttackPending && HasAttackLine())
 		{
-			AttackTimer = AttackCooldown;
-			PlayAnim(FMath::FRand() < 0.5f ? EZAnim::Attack : EZAnim::Bite, false, 1.4f);
+			AttackTimer = MeleeCooldown;
+			bAttackPending = true;
+			AttackWindup = WindupSeconds;
+			GetCharacterMovement()->StopMovementImmediately();
+			Move = FVector::ZeroVector;
+			PlayAnim(FMath::FRand() < 0.5f ? EZAnim::Attack : EZAnim::Bite, false, bHeavy ? 1.f : 1.4f);
 			if (BiteSound) UGameplayStatics::PlaySoundAtLocation(this, BiteSound, GetActorLocation());
-			Target->TakeHit(AttackDamage);
 		}
 	}
 	else
@@ -200,7 +231,7 @@ void AFOZombie::Tick(float Dt)
 
 	if (OneShotTimer <= 0.f)
 	{
-		if (bChasing && Dist <= AttackRange + 40.f) PlayAnim(EZAnim::Idle, true);
+		if (bAttackPending || (bChasing && Dist <= AttackRange + 40.f)) PlayAnim(EZAnim::Idle, true);
 		else if (bChasing) PlayAnim(bRunner ? EZAnim::Run : EZAnim::Walk, true, bRunner ? 1.f : 1.35f);
 		else PlayAnim(EZAnim::Walk, true, 0.8f);
 	}

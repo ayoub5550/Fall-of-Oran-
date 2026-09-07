@@ -89,6 +89,7 @@ public:
 	float ShotClock = 0.f;
 	int32 ShotIndex = 0;
 	void TickShots(float Dt);
+	void RunEncounterValidation(); // explicit synthetic -FOEncounterTest only
 
 private:
 	const FFOLevelDef* Level = nullptr;

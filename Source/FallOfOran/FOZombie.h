@@ -23,6 +23,7 @@ public:
 	void TakeHit(float Damage, AFOCharacter* From);
 	void Die(AFOCharacter* Killer);
 	void PlayAnim(EZAnim A, bool bLoop, float Speed = 1.f);
+	bool HasAttackLine() const;
 
 	int32 Variant = 0;          // 0 war, 1 girl, 2 cop, 3 parasite
 	bool bRunner = false;       // fast variant
@@ -32,6 +33,13 @@ public:
 	float Hp = 100.f;
 	float HpMul = 1.f;          // per-level difficulty (applied in BeginPlay)
 	float AttackTimer = 0.f;
+	float AttackWindup = 0.f;
+	bool bAttackPending = false;
+	bool bHeavy = false;        // non-running police silhouette: durable, slow, avoidable strike
+	float ChaseSpeed = 190.f;
+	float MeleeDamage = 20.f;
+	float MeleeCooldown = 1.3f;
+	float WindupSeconds = 0.45f;
 	float WanderTimer = 0.f;
 	FVector WanderDir = FVector::ZeroVector;
 	float GroanTimer = 3.f;

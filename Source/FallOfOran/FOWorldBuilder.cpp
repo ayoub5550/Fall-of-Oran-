@@ -108,6 +108,16 @@ UStaticMeshComponent* AFOWorldBuilder::Prop(const TCHAR* Path, const FVector& Lo
 	const FBox B = M->GetBoundingBox();
 	const float S = B.GetSize().Z > 1.f ? TargetHeightCm / B.GetSize().Z : 1.f;
 	Place(C, FTransform(FRotator(0, Yaw, 0), Loc - FVector(0, 0, B.Min.Z * S), FVector(S)));
+	if (FString(Path).Contains(TEXT("/Checkpoint/")))
+	{
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		UBoxComponent* Bounds = NewObject<UBoxComponent>(this);
+		Bounds->SetupAttachment(C);
+		Bounds->SetRelativeLocation(B.GetCenter());
+		Bounds->SetBoxExtent(B.GetExtent());
+		Bounds->SetCollisionProfileName(TEXT("BlockAll"));
+		Bounds->RegisterComponent();
+	}
 	if (Override) for (int32 i = 0; i < C->GetNumMaterials(); i++) C->SetMaterial(i, Override);
 	return C;
 }
@@ -666,7 +676,8 @@ void AFOWorldBuilder::SpawnZombies()
 		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = i % 4;
-			Z->bRunner = Rng.FRand() < LevelDef->RunnerChance;
+			const bool bRollRunner = Rng.FRand() < LevelDef->RunnerChance;
+			Z->bRunner = Z->Variant != 2 && bRollRunner; // police silhouette always teaches heavy role
 			Z->HpMul = LevelDef->ZombieHpMul;
 			UGameplayStatics::FinishSpawningActor(Z, T);
 		}

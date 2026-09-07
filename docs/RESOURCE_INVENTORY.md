@@ -58,6 +58,11 @@ Do not merge or overwrite the preserved baseline for this asset experiment.
 
 ### Executed validation and visual blocker
 
+Follow-up: see `ENCOUNTER_CANDIDATE.md`. A vertex-color material now makes the
+generator housing readable in the inspected software render; partial player/
+tripod occlusion and surrounding darkness remain. Earlier findings below
+describe the initial asset-import checkpoint, not the latest material state.
+
 - All five GLBs imported as one combined static mesh each. Imported triangle
   counts: generator 228, barrier 120, barrel 410, crate 124, bench 236.
   Source barrel has 412 triangles; import reports 410 after processing.

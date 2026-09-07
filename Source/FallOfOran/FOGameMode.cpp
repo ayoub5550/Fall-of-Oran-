@@ -111,6 +111,11 @@ void AFOGameMode::Tick(float Dt)
 	if (HintTimer > 0.f) { HintTimer -= Dt; if (HintTimer <= 0.f) Hint.Empty(); }
 	if (NoteTimer > 0.f) { NoteTimer -= Dt; if (NoteTimer <= 0.f) NoteText.Empty(); }
 	if (RestartTimer > 0.f) RestartTimer -= Dt;
+	if (FParse::Param(FCommandLine::Get(), TEXT("FOEncounterTest")))
+	{
+		RunEncounterValidation();
+		return;
+	}
 	if (bShotMode) TickShots(Dt);
 	if (bSelfTest) TickSelfTest(Dt);
 }
@@ -251,7 +256,7 @@ void AFOGameMode::SpawnZombiesBehindPlayer(int32 Count)
 		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = FMath::RandRange(0, 3);
-			Z->bRunner = FMath::FRand() < 0.35f;
+			Z->bRunner = Z->Variant != 2 && FMath::FRand() < 0.35f;
 			Z->bChasing = true;
 			Z->HpMul = Level->ZombieHpMul;
 			UGameplayStatics::FinishSpawningActor(Z, T);
@@ -378,7 +383,8 @@ void AFOGameMode::TickShots(float Dt)
 		const FFOPuzzleDef& P = Level->Puzzles[0];
 		const FVector Face = FRotator(0, P.Yaw, 0).Vector() * -1.f; // puzzle front (-X local)
 		const FVector Side = FVector::CrossProduct(Face, FVector::UpVector);
-		Shots.Add({ P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f), (P.Location + FVector(0, 0, 150.f) - (P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f))).Rotation(), false });
+		const FVector ViewPos = P.Location + Face * 420.f + Side * 180.f + FVector(0, 0, 100.f);
+		Shots.Add({ ViewPos, (P.Location + FVector(0, 0, 40.f) - ViewPos).Rotation(), false });
 	}
 	int32 Num = Shots.Num();
 	{ int32 Max = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotMax="), Max) && Max > 0) Num = FMath::Min(Num, Max); }

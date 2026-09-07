@@ -3,6 +3,7 @@
 #include "FOGameMode.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
 #include "FallOfOran.h"
 
@@ -16,20 +17,34 @@ void AFOGeneratorPuzzle::Setup(const FFOPuzzleDef& InDef, const FRandomStream& R
 		UStaticMeshComponent* Body = NewObject<UStaticMeshComponent>(this);
 		Body->SetupAttachment(RootComponent);
 		Body->SetStaticMesh(Asset);
-		Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Body->SetCollisionProfileName(TEXT("BlockAll"));
+		Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Body->RegisterComponent();
+		UBoxComponent* Bounds = NewObject<UBoxComponent>(this);
+		Bounds->SetupAttachment(RootComponent);
+		Bounds->SetRelativeLocation(Asset->GetBoundingBox().GetCenter());
+		Bounds->SetBoxExtent(Asset->GetBoundingBox().GetExtent());
+		Bounds->SetCollisionProfileName(TEXT("BlockAll"));
+		Bounds->RegisterComponent();
 	}
 	else
 	{
 		UE_LOG(LogFO, Warning, TEXT("Checkpoint generator mesh missing; using blockout"));
 		MakeBox(FVector(0, 0, 55), FVector(120, 180, 110), FLinearColor(0.3f, 0.28f, 0.08f));
 	}
-	StatusLight = MakeLight(FVector(-70, 0, 110), FLinearColor(1, 0.2f, 0.05f), 12.f, 350.f);
+	// Readable front control face: low emissive only on local machine details,
+	// not a global exposure change (physical phones are brighter than Lavapipe).
+	MakeBox(FVector(-68, 35, 82), FVector(5, 48, 38),
+		FLinearColor(0.086f, 0.086f, 0.086f));
+	MakeBox(FVector(-72, 35, 89), FVector(2, 32, 8),
+		FLinearColor(0.9f, 0.75f, 0.1f), FLinearColor(0.9f, 0.75f, 0.1f) * 0.8f, false);
+	StatusLight = MakeLight(FVector(-80, 35, 100), FLinearColor(1, 0.2f, 0.05f), 12.f, 350.f);
 }
 
 bool AFOGeneratorPuzzle::CanInteract(AFOCharacter* Who) const
 {
-	return !bRunning && Super::CanInteract(Who);
+	return Who && FVector::DistSquared2D(Who->GetActorLocation(), GetActorLocation())
+		<= FMath::Square(GetInteractRange()) && !bRunning && Super::CanInteract(Who);
 }
 
 void AFOGeneratorPuzzle::Interact(AFOCharacter* Who)

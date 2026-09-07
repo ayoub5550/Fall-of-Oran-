@@ -15,6 +15,8 @@ public:
 	virtual FString GetPrompt() const override { return TEXT("عبّئ الوقود وشغّل المولّد"); }
 	virtual void Interact(AFOCharacter* Who) override;
 	virtual void DebugSolve() override;
+	float StartupProgress() const { return Elapsed; }
+	bool IsRunning() const { return bRunning; }
 private:
 	void FinishStartup();
 	bool bRunning = false;
