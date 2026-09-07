@@ -217,7 +217,17 @@ void AFOCharacter::OnLook(const FInputActionValue& V)
 	AddControllerYawInput(L.X * 0.9f);
 	AddControllerPitchInput(L.Y * 0.9f);
 }
-void AFOCharacter::OnFire(const FInputActionValue&) { TryShoot(); }
+void AFOCharacter::OnFire(const FInputActionValue&)
+{
+	// Desktop GameOnly input captures the mouse before the Slate menu sees it.
+	// Let the existing fire action (Space/click/controller) start or retry, but
+	// never fire a shot on the same input used to dismiss an overlay.
+	if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>())
+	{
+		if (GM->State != EFOState::Playing) { GM->StartGame(); return; }
+	}
+	TryShoot();
+}
 void AFOCharacter::OnSprintStart(const FInputActionValue&) { bSprinting = true; }
 void AFOCharacter::OnSprintEnd(const FInputActionValue&) { bSprinting = false; }
 void AFOCharacter::OnInteract(const FInputActionValue&) { TryInteract(); }
