@@ -2,6 +2,9 @@
 #include "FOGameMode.h"
 #include "FOCharacter.h"
 #include "Core/FOLevelRegistry.h"
+#include "Core/FOChallengeRegistry.h"
+#include "Core/FOGameInstance.h"
+#include "Mission/FOChallengeComponent.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
@@ -51,7 +54,7 @@ TSharedRef<SWidget> SFOHud::BrightnessBar(int32 FontSize)
 {
 	TSharedPtr<STextBlock> Label;
 	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0)[ HudButton(FText::FromString(TEXT("\u2212")), FontSize, FontSize * 2.6f, FontSize * 2.2f, FLinearColor(0.1f, 0.1f, 0.12f, 0.6f), [this]() { if (GM.IsValid()) GM->AdjustBrightness(0.8f); }) ]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0)[ HudButton(FText::FromString(TEXT("-")), FontSize, FontSize * 2.6f, FontSize * 2.2f, FLinearColor(0.1f, 0.1f, 0.12f, 0.6f), [this]() { if (GM.IsValid()) GM->AdjustBrightness(0.8f); }) ]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0)[ SAssignNew(Label, STextBlock).Font(Font(FontSize)).ColorAndOpacity(GSand).ShadowOffset(FVector2D(1, 1)) ]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0)[ HudButton(FText::FromString(TEXT("+")), FontSize, FontSize * 2.6f, FontSize * 2.2f, FLinearColor(0.1f, 0.1f, 0.12f, 0.6f), [this]() { if (GM.IsValid()) GM->AdjustBrightness(1.25f); }) ];
 	if (!BrightText.IsValid()) BrightText = Label; else BrightText2 = Label;
@@ -123,6 +126,9 @@ void SFOHud::Construct(const FArguments& InArgs)
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ SAssignNew(KillsText, STextBlock).Font(Font(22)).ColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.85f)).ShadowOffset(FVector2D(1, 1)) ]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ SAssignNew(LevelText, STextBlock).Font(Font(16)).ColorAndOpacity(FLinearColor(0.7f, 0.65f, 0.55f)).ShadowOffset(FVector2D(1, 1)) ]
+				// challenge wave / timer line (survival + supply run)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0, 6.f, 0, 0)
+				[ SAssignNew(ChallengeStatusText, STextBlock).Visibility(this, &SFOHud::ChallengeVis).Font(Font(24)).ColorAndOpacity(FLinearColor(1.f, 0.8f, 0.35f)).ShadowOffset(FVector2D(1, 1)) ]
 			]
 			// brightness (small, top-centre)
 			+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0.f, 14.f)[ BrightnessBar(16) ]
@@ -181,13 +187,43 @@ void SFOHud::Construct(const FArguments& InArgs)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 14.f)[ SAssignNew(TitleText, STextBlock).Font(Font(64)).ColorAndOpacity(GRed).ShadowOffset(FVector2D(2, 2)) ]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ SAssignNew(SubtitleText, STextBlock).Font(Font(22)).ColorAndOpacity(GSand).AutoWrapText(true).Justification(ETextJustify::Center) ]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SAssignNew(SubtitleText, STextBlock).Font(Font(22)).ColorAndOpacity(GSand)
+					.WrapTextAt(1000.f).Justification(ETextJustify::Center)
+				]
 				// level chooser (menu only)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 22.f, 0, 0)
 				[
+					SNew(SHorizontalBox).Visibility(this, &SFOHud::CampaignMenuVis)
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("< السابق")), 20, 170.f, 56.f, FLinearColor(0.1f, 0.1f, 0.12f, 0.7f), [this]() { if (GM.IsValid()) GM->SelectRelativeLevel(-1); }) ]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("التالي >")), 20, 170.f, 56.f, FLinearColor(0.1f, 0.1f, 0.12f, 0.7f), [this]() { if (GM.IsValid()) GM->SelectRelativeLevel(+1); }) ]
+				]
+				// mode chooser (menu only): campaign / survival / supply run
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14.f, 0, 0)
+				[
 					SNew(SHorizontalBox).Visibility(this, &SFOHud::MenuOnlyVis)
-					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("\u25C0 السابق")), 20, 170.f, 56.f, FLinearColor(0.1f, 0.1f, 0.12f, 0.7f), [this]() { if (GM.IsValid()) GM->SelectRelativeLevel(-1); }) ]
-					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("التالي \u25B6")), 20, 170.f, 56.f, FLinearColor(0.1f, 0.1f, 0.12f, 0.7f), [this]() { if (GM.IsValid()) GM->SelectRelativeLevel(+1); }) ]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("< الطور")), 20, 150.f, 52.f, FLinearColor(0.14f, 0.1f, 0.05f, 0.8f), [this]() { if (GM.IsValid()) GM->SelectRelativeMode(-1); }) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.f, 0)[ SAssignNew(ModeText, STextBlock).Font(Font(20)).ColorAndOpacity(FLinearColor(1.f, 0.85f, 0.5f)) ]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("الطور >")), 20, 150.f, 52.f, FLinearColor(0.14f, 0.1f, 0.05f, 0.8f), [this]() { if (GM.IsValid()) GM->SelectRelativeMode(+1); }) ]
+				]
+				// death / win screen: retry (tap anywhere) or explicitly return to the menu
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 16.f, 0, 0)
+				[
+					SNew(SHorizontalBox).Visibility(this, &SFOHud::EndScreenVis)
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)
+					[
+						SNew(SBox).WidthOverride(190.f).HeightOverride(56.f)
+						[
+							SNew(SButton).ButtonColorAndOpacity(FLinearColor(0.35f, 0.12f, 0.05f, 0.85f)).HAlign(HAlign_Center)
+							.OnPressed_Lambda([this]() { if (GM.IsValid()) GM->StartGame(); })
+							[
+								SNew(STextBlock).Font(Font(20)).ColorAndOpacity(GSand)
+								.Text_Lambda([this]() { return FText::FromString(GM.IsValid() && !GM->IsChallenge() && GM->State == EFOState::Won ? TEXT("متابعة") : TEXT("إعادة المحاولة")); })
+							]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0)[ HudButton(FText::FromString(TEXT("القائمة")), 20, 190.f, 56.f, FLinearColor(0.1f, 0.12f, 0.16f, 0.85f), [this]() { if (GM.IsValid()) GM->ReturnToMenu(); }) ]
 				]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 18.f, 0, 0)[ BrightnessBar(22) ]
 			]
@@ -214,6 +250,9 @@ EVisibility SFOHud::HintVis() const { return (GM.IsValid() && !GM->Hint.IsEmpty(
 EVisibility SFOHud::NoteVis() const { return (GM.IsValid() && !GM->NoteText.IsEmpty() && !GM->IsKeypadOpen()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::KeypadVis() const { return (GM.IsValid() && GM->IsKeypadOpen()) ? EVisibility::Visible : EVisibility::Collapsed; }
 EVisibility SFOHud::MenuOnlyVis() const { return (GM.IsValid() && GM->State == EFOState::Menu) ? EVisibility::Visible : EVisibility::Collapsed; }
+EVisibility SFOHud::CampaignMenuVis() const { return (GM.IsValid() && GM->State == EFOState::Menu && !GM->IsChallenge()) ? EVisibility::Visible : EVisibility::Collapsed; }
+EVisibility SFOHud::EndScreenVis() const { return (GM.IsValid() && (GM->State == EFOState::Dead || GM->State == EFOState::Won)) ? EVisibility::Visible : EVisibility::Collapsed; }
+EVisibility SFOHud::ChallengeVis() const { return (GM.IsValid() && !GM->GetChallengeStatusLine().IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::InteractVis() const
 {
 	// Reserve the slot so the sprint button above it never jumps under a finger.
@@ -236,7 +275,12 @@ void SFOHud::Tick(const FGeometry& G, const double T, const float Dt)
 	}
 	const FFOLevelDef* L = GM->GetLevel();
 	KillsText->SetText(FText::FromString(FString::Printf(TEXT("قتلى %d"), GM->Kills)));
-	LevelText->SetText(FText::FromString(L ? FString::Printf(TEXT("المستوى %d — %s"), GM->GetLevelIndex() + 1, *L->Title) : FString()));
+	LevelText->SetText(FText::FromString(L
+		? (GM->IsChallenge() ? FString::Printf(TEXT("%s — %s"), *GM->GetModeName(), *L->Title)
+		                     : FString::Printf(TEXT("المستوى %d — %s"), GM->GetLevelIndex() + 1, *L->Title))
+		: FString()));
+	ChallengeStatusText->SetText(FText::FromString(GM->GetChallengeStatusLine()));
+	if (ModeText.IsValid()) ModeText->SetText(FText::FromString(GM->GetModeName()));
 	ObjectiveText->SetText(FText::FromString(GM->GetObjectiveText()));
 	HintText->SetText(FText::FromString(GM->Hint));
 	NoteTextBlock->SetText(FText::FromString(GM->NoteText));
@@ -254,7 +298,32 @@ void SFOHud::Tick(const FGeometry& G, const double T, const float Dt)
 	{
 	case EFOState::Menu:
 		TitleText->SetText(LOCTEXT("Title", "سقوط وهران"));
-		SubtitleText->SetText(FText::FromString(L ? FString::Printf(TEXT("المستوى %d/%d: %s\n%s\nالمس الشاشة للبدء"), GM->GetLevelIndex() + 1, FFOLevelRegistry::Num(), *L->Title, *L->Intro) : FString(TEXT("المس الشاشة للبدء"))));
+		if (GM->IsChallenge())
+		{
+			const UFOGameInstance* GI = UFOGameInstance::Get(GM.Get());
+			const FFOChallengeDef* C = GI ? GI->CurrentChallenge() : nullptr;
+			const FFOChallengeRecord* Rec = (GI && C) ? GI->ChallengeRecord(C->Id) : nullptr;
+			FString Best;
+			if (Rec && C && Rec->Attempts > 0)
+			{
+				if (C->Mode == EFOFlowMode::Survival)
+					Best = FString::Printf(TEXT("\nأفضل موجة: %d/%d — محاولات %d"), Rec->BestWave, C->Waves.Num(), Rec->Attempts);
+				else
+				{
+					const FString Detail = Rec->bCleared
+						? FString::Printf(TEXT("أفضل وقت متبقٍّ %.0f ث"), Rec->BestTimeLeft)
+						: FString(TEXT("لم يكتمل بعد"));
+					Best = FString::Printf(TEXT("\n%s — محاولات %d"), *Detail, Rec->Attempts);
+				}
+			}
+			SubtitleText->SetText(FText::FromString(C
+				? FString::Printf(TEXT("%s\n%s\n%s%s\nالمس الشاشة للبدء"), *GM->GetModeName(), *C->Title, *C->Rules, *Best)
+				: FString(TEXT("المس الشاشة للبدء"))));
+		}
+		else
+		{
+			SubtitleText->SetText(FText::FromString(L ? FString::Printf(TEXT("المستوى %d/%d: %s\n%s\nالطور: %s (استعمل أزرار الطور)\nالمس الشاشة للبدء"), GM->GetLevelIndex() + 1, FFOLevelRegistry::Num(), *L->Title, *L->Intro, *GM->GetModeName()) : FString(TEXT("المس الشاشة للبدء"))));
+		}
 		break;
 	case EFOState::Dead:
 		TitleText->SetText(LOCTEXT("Dead", "لقد مُتّ"));

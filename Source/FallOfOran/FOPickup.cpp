@@ -37,6 +37,8 @@ void AFOPickup::BeginPlay()
 	{
 	case EFOItem::Fuel: C = FLinearColor(0.9f, 0.35f, 0.05f); Size = FVector(35.f, 25.f, 45.f); break;
 	case EFOItem::Health: C = FLinearColor(0.85f, 0.1f, 0.1f); Size = FVector(40.f, 30.f, 25.f); break;
+	// Challenge supply crate: deliberately distinct from the campaign fuel can (different tag + colour).
+	case EFOItem::Supply: C = FLinearColor(0.15f, 0.75f, 0.85f); Size = FVector(55.f, 45.f, 40.f); break;
 	default: C = FLinearColor(0.25f, 0.45f, 0.15f); Size = FVector(35.f, 25.f, 22.f); break;
 	}
 	Mesh->SetRelativeScale3D(Size / 100.f);

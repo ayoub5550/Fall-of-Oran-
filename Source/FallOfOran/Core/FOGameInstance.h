@@ -14,6 +14,16 @@ public:
 	UPROPERTY() FFOProgress Progress;
 };
 
+/** Disk format for challenge-mode personal bests (slot "fo_challenge"). Deliberately a SEPARATE
+ *  slot so a challenge can never corrupt or unlock campaign progress. */
+UCLASS()
+class UFOChallengeSaveGame : public USaveGame
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY() FFOChallengeProgress Progress;
+};
+
 /**
  * Lives for the whole app session (survives level loads).
  * Owns campaign progress (unlocked levels, best scores) and the "which level do we play next" state.
@@ -48,6 +58,30 @@ public:
 	void Load();
 	void ResetProgress();
 
+	// ---------------------------------------------------------------- mode selection
+	/** Which flow the next map load plays: campaign or one of the challenge modes. Session state
+	 *  plus a one-line record in the challenge slot; never written into the campaign save. */
+	EFOFlowMode FlowMode() const { return Mode; }
+	void SetFlowMode(EFOFlowMode NewMode);
+	/** Cycle Campaign -> Survival -> SupplyRun -> Campaign (menu ◄ ►). */
+	void CycleFlowMode(int32 Delta);
+	/** Definition for the selected challenge mode, or nullptr in campaign mode. */
+	const FFOChallengeDef* CurrentChallenge() const;
+	/** Records an attempt / result for a challenge. Campaign progress is untouched. */
+	void OnChallengeFinished(FName Id, bool bCleared, int32 WavesCleared, int32 Kills, float Seconds, float TimeLeft);
+	void NoteChallengeAttempt(FName Id);
+	const FFOChallengeRecord* ChallengeRecord(FName Id) const;
+	void SaveChallenges();
+	void LoadChallenges();
+	void ResetChallengeRecords();
+
+	FFOChallengeProgress Challenges;
+	static const TCHAR* ChallengeSlotName;
+
 	FFOProgress Progress;
 	static const TCHAR* SlotName;
+
+private:
+	EFOFlowMode Mode = EFOFlowMode::Campaign;
+	FFOChallengeRecord& MutableRecord(FName Id);
 };
