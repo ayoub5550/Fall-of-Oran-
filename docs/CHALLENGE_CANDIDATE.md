@@ -63,3 +63,20 @@ Design references: [research](SURVIVAL_DESIGN_REFERENCES.md),
   this source build.
 
 Do not call this a polished release or proof that the user's phone problem is fixed.
+
+## Packaged Android candidate
+
+- Source: `f1a3401`; full ASTC Development BuildCookRun succeeded in 502.32 s.
+- `Fall-of-Oran-challenge-candidate.apk`: **188,767,287 bytes**.
+- SHA256: `e808a0b10a84715cecbaae3dcc3757ac1418fe58c49d5fa2127b578b75dbbd8b`.
+- Archive verification 2026-09-07T18:56:40Z: package/version/arm64 passed,
+  224 required assets present among 364 game entries, none missing.
+- APK Signature Scheme v2 and 16 KB page alignment verified.
+- Debug certificate SHA256:
+  `32cf66cf3d5ee72b9ca4e7f337d36e11a5c2c9c7b7a349cef1e36e76ec80b8f0`.
+  This differs from the preceding checkpoint APK signer. Installing as an
+  update may fail; uninstalling can delete progress. Stable release signing
+  is still unresolved.
+- Initial signature verification command lacked Java on PATH (exit 127).
+  Repeated against the same APK with the installed JDK on PATH: passed.
+- No Android/device/multitouch/FPS claim follows from these packaging checks.
