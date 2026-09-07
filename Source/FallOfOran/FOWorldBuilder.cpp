@@ -203,6 +203,17 @@ void AFOWorldBuilder::BuildWorld(const FFOLevelDef& Def)
 	BuildExitGate();
 	SpawnItems();
 	SpawnPuzzles();
+	// Authored local set dressing around generator objectives, not more random
+	// street clutter. The main lane and the front interaction space remain open.
+	for (const FFOPuzzleDef& P : Def.Puzzles)
+	{
+		if (P.Type != EFOPuzzleType::Generator) continue;
+		const FVector B = P.Location;
+		Prop(TEXT("/Game/Props/Checkpoint/SM_MaintenanceBench/SM_MaintenanceBench.SM_MaintenanceBench"), B + FVector(-350, -150, 0), 0, 85.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_SupplyCrate/SM_SupplyCrate.SM_SupplyCrate"), B + FVector(-500, -150, 0), 12.f, 55.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_SupplyBarrel/SM_SupplyBarrel.SM_SupplyBarrel"), B + FVector(280, -120, 0), 0, 90.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_CheckpointBarrier/SM_CheckpointBarrier.SM_CheckpointBarrier"), B + FVector(-600, 200, 0), 90.f, 85.f);
+	}
 	SpawnZombies();
 	if (USoundBase* Amb = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/ambience.ambience")))
 		Ambience = UGameplayStatics::SpawnSound2D(this, Amb, 0.8f, 1.f, 0.f, nullptr, true, true);
@@ -508,6 +519,10 @@ void AFOWorldBuilder::BuildCars()
 	{
 		const float X = Rng.FRandRange(700.f, StreetLength - 800.f);
 		const float Y = Rng.FRandRange(-StreetWidth * 0.35f, StreetWidth * 0.35f);
+		bool bNearPuzzle = false;
+		for (const FFOPuzzleDef& P : LevelDef->Puzzles)
+			if (FMath::Abs(X - P.Location.X) < 1000.f) { bNearPuzzle = true; break; }
+		if (bNearPuzzle) continue; // keep objective approaches free of parked-car collisions
 		const bool bBurnt = Rng.FRand() < 0.35f;
 		UStaticMeshComponent* C = Prop(Cars[i % 5], FVector(X, Y, 0), Rng.FRandRange(0, 360.f), 150.f, bBurnt ? Burnt : nullptr);
 		if (C && bBurnt) Light(FVector(X, Y, 90.f), FLinearColor(1.f, 0.35f, 0.08f), 6.f, 300.f); // embers
@@ -524,7 +539,11 @@ void AFOWorldBuilder::BuildDebris()
 	for (int32 i = 0; i < 26; i++)
 	{
 		const float S = Rng.FRandRange(25.f, 80.f);
-		Box(FVector(Rng.FRandRange(500.f, StreetLength - 300.f), Rng.FRandRange(-600.f, 600.f), S * 0.3f), FVector(S, S * 0.8f, S * 0.6f), Concrete, FRotator(Rng.FRandRange(-10, 10), Rng.FRandRange(0, 360.f), Rng.FRandRange(-10, 10)));
+		const FVector Loc(Rng.FRandRange(500.f, StreetLength - 300.f), Rng.FRandRange(-600.f, 600.f), S * 0.3f);
+		bool bNearPuzzle = false;
+		for (const FFOPuzzleDef& P : LevelDef->Puzzles)
+			if (FMath::Abs(Loc.X - P.Location.X) < 1000.f) { bNearPuzzle = true; break; }
+		if (!bNearPuzzle) Box(Loc, FVector(S, S * 0.8f, S * 0.6f), Concrete, FRotator(Rng.FRandRange(-10, 10), Rng.FRandRange(0, 360.f), Rng.FRandRange(-10, 10)));
 	}
 	// trash bags on the sidewalks
 	for (int32 i = 0; i < 14; i++)

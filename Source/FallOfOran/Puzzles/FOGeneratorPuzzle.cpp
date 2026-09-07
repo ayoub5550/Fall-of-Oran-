@@ -2,6 +2,8 @@
 #include "FOCharacter.h"
 #include "FOGameMode.h"
 #include "Components/PointLightComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "FallOfOran.h"
 
 AFOGeneratorPuzzle::AFOGeneratorPuzzle() { PrimaryActorTick.bCanEverTick = true; }
@@ -9,9 +11,19 @@ AFOGeneratorPuzzle::AFOGeneratorPuzzle() { PrimaryActorTick.bCanEverTick = true;
 void AFOGeneratorPuzzle::Setup(const FFOPuzzleDef& InDef, const FRandomStream& Rng)
 {
 	Super::Setup(InDef, Rng);
-	MakeBox(FVector(0, 0, 55), FVector(120, 180, 110), FLinearColor(0.3f, 0.28f, 0.08f));
-	MakeBox(FVector(0, 0, 120), FVector(100, 160, 20), FLinearColor(0.08f, 0.08f, 0.08f));
-	MakeBox(FVector(40, 50, 165), FVector(18, 18, 90), FLinearColor(0.1f, 0.1f, 0.1f));
+	if (UStaticMesh* Asset = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Props/Checkpoint/SM_CheckpointGenerator/SM_CheckpointGenerator.SM_CheckpointGenerator")))
+	{
+		UStaticMeshComponent* Body = NewObject<UStaticMeshComponent>(this);
+		Body->SetupAttachment(RootComponent);
+		Body->SetStaticMesh(Asset);
+		Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Body->RegisterComponent();
+	}
+	else
+	{
+		UE_LOG(LogFO, Warning, TEXT("Checkpoint generator mesh missing; using blockout"));
+		MakeBox(FVector(0, 0, 55), FVector(120, 180, 110), FLinearColor(0.3f, 0.28f, 0.08f));
+	}
 	StatusLight = MakeLight(FVector(-70, 0, 110), FLinearColor(1, 0.2f, 0.05f), 12.f, 350.f);
 }
 
