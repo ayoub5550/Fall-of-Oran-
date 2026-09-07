@@ -23,6 +23,7 @@
 #include "ShaderCompiler.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/Paths.h"
+#include "Framework/Application/SlateApplication.h"
 
 namespace
 {
@@ -68,8 +69,15 @@ void AFOGameMode::BeginPlay()
 	}
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
-		PC->bShowMouseCursor = false;
-		PC->SetInputMode(FInputModeGameOnly());
+		// Touch controls are Slate widgets, not gameplay key bindings. Give the UI
+		// first refusal and leave unhandled touches available for camera look.
+		PC->bShowMouseCursor = FSlateApplication::IsInitialized() && FSlateApplication::Get().IsFakingTouchEvents();
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PC->SetInputMode(InputMode);
+		if (GEngine && GEngine->GameViewport)
+			GEngine->GameViewport->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
 	}
 	State = EFOState::Menu;
 	bShotMode = FParse::Param(FCommandLine::Get(), TEXT("FOShots"));

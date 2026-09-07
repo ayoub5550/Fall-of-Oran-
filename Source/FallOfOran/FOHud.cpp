@@ -94,7 +94,7 @@ void SFOHud::Construct(const FArguments& InArgs)
 	GM = InArgs._GameMode;
 	ChildSlot
 	[
-		SNew(SOverlay)
+		SNew(SOverlay).Visibility(EVisibility::SelfHitTestInvisible)
 		// damage / heal flash
 		+ SOverlay::Slot()
 		[ SNew(SImage).Visibility(EVisibility::HitTestInvisible).Image(FCoreStyle::Get().GetBrush("WhiteBrush")).ColorAndOpacity(this, &SFOHud::FlashColor) ]
@@ -193,7 +193,13 @@ void SFOHud::Construct(const FArguments& InArgs)
 			]
 		]
 	];
-	SetVisibility(EVisibility::Visible);
+	// The full-screen HUD must not become the hit target in empty areas:
+	// the virtual joystick is a lower-Z sibling, not a child of this widget.
+	SetVisibility(TAttribute<EVisibility>::CreateLambda([this]()
+	{
+		return GM.IsValid() && GM->State == EFOState::Playing
+			? EVisibility::SelfHitTestInvisible : EVisibility::Visible;
+	}));
 }
 
 FSlateColor SFOHud::FlashColor() const { return FlashCol; }
@@ -203,7 +209,7 @@ FSlateColor SFOHud::SprintColor() const
 	return (P && P->bSprinting) ? FLinearColor(0.75f, 0.55f, 0.1f, 0.85f) : FLinearColor(0.1f, 0.1f, 0.12f, 0.6f);
 }
 EVisibility SFOHud::OverlayVis() const { return (GM.IsValid() && GM->State != EFOState::Playing) ? EVisibility::Visible : EVisibility::Collapsed; }
-EVisibility SFOHud::HudVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::Visible : EVisibility::Collapsed; }
+EVisibility SFOHud::HudVis() const { return (GM.IsValid() && GM->State == EFOState::Playing) ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::HintVis() const { return (GM.IsValid() && !GM->Hint.IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::NoteVis() const { return (GM.IsValid() && !GM->NoteText.IsEmpty() && !GM->IsKeypadOpen()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; }
 EVisibility SFOHud::KeypadVis() const { return (GM.IsValid() && GM->IsKeypadOpen()) ? EVisibility::Visible : EVisibility::Collapsed; }
