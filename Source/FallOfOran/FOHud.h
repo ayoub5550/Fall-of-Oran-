@@ -37,9 +37,12 @@ private:
 	EVisibility KeypadVis() const;
 	EVisibility InteractVis() const;
 	EVisibility MenuOnlyVis() const;
+	EVisibility CampaignMenuVis() const;
+	EVisibility EndScreenVis() const;
+	EVisibility ChallengeVis() const;
 
 	TWeakObjectPtr<AFOGameMode> GM;
-	TSharedPtr<STextBlock> AmmoText, KillsText, LevelText, ObjectiveText, TitleText, SubtitleText, HintText, NoteTextBlock, InteractText, KeypadText, BrightText, BrightText2;
+	TSharedPtr<STextBlock> AmmoText, KillsText, LevelText, ChallengeStatusText, ModeText, ObjectiveText, TitleText, SubtitleText, HintText, NoteTextBlock, InteractText, KeypadText, BrightText, BrightText2;
 	TSharedPtr<SBox> HealthFill;
 	float HealthFrac = 1.f;
 	FLinearColor FlashCol = FLinearColor::Transparent;

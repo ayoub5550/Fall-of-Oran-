@@ -69,6 +69,10 @@ public:
 	void BuildDebris();
 	void BuildPalm(const FVector& Base);
 	void BuildExitGate();
+	/** Compact authored challenge arena (survival / supply run): cover, resupply station, extraction pad. */
+	void BuildChallengeArena();
+	/** Invisible blocking box helper for imported props that ship without collision. */
+	void Blocker(const FVector& Center, const FVector& Extent);
 	void SpawnItems();
 	void SpawnPuzzles();
 	void SpawnZombies();

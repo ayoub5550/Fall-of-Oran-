@@ -7,6 +7,7 @@
 #include "Mission/FOMissionComponent.h"
 #include "Puzzles/FOBreakerPuzzle.h"
 #include "Puzzles/FOKeypadPuzzle.h"
+#include "Puzzles/FOGeneratorPuzzle.h"
 #include "Puzzles/FONote.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -107,6 +108,16 @@ UStaticMeshComponent* AFOWorldBuilder::Prop(const TCHAR* Path, const FVector& Lo
 	const FBox B = M->GetBoundingBox();
 	const float S = B.GetSize().Z > 1.f ? TargetHeightCm / B.GetSize().Z : 1.f;
 	Place(C, FTransform(FRotator(0, Yaw, 0), Loc - FVector(0, 0, B.Min.Z * S), FVector(S)));
+	if (FString(Path).Contains(TEXT("/Checkpoint/")))
+	{
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		UBoxComponent* Bounds = NewObject<UBoxComponent>(this);
+		Bounds->SetupAttachment(C);
+		Bounds->SetRelativeLocation(B.GetCenter());
+		Bounds->SetBoxExtent(B.GetExtent());
+		Bounds->SetCollisionProfileName(TEXT("BlockAll"));
+		Bounds->RegisterComponent();
+	}
 	if (Override) for (int32 i = 0; i < C->GetNumMaterials(); i++) C->SetMaterial(i, Override);
 	return C;
 }
@@ -197,11 +208,26 @@ void AFOWorldBuilder::BuildWorld(const FFOLevelDef& Def)
 	BuildGround();
 	BuildBuildings();
 	BuildStreetFurniture();
-	BuildCars();
-	BuildDebris();
+	if (!Def.bChallengeArena)
+	{
+		BuildCars();
+		BuildDebris();
+	}
 	BuildExitGate();
 	SpawnItems();
 	SpawnPuzzles();
+	// Authored local set dressing around generator objectives, not more random
+	// street clutter. The main lane and the front interaction space remain open.
+	for (const FFOPuzzleDef& P : Def.Puzzles)
+	{
+		if (P.Type != EFOPuzzleType::Generator) continue;
+		const FVector B = P.Location;
+		Prop(TEXT("/Game/Props/Checkpoint/SM_MaintenanceBench/SM_MaintenanceBench.SM_MaintenanceBench"), B + FVector(-350, -150, 0), 0, 85.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_SupplyCrate/SM_SupplyCrate.SM_SupplyCrate"), B + FVector(-500, -150, 0), 12.f, 55.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_SupplyBarrel/SM_SupplyBarrel.SM_SupplyBarrel"), B + FVector(280, -120, 0), 0, 90.f);
+		Prop(TEXT("/Game/Props/Checkpoint/SM_CheckpointBarrier/SM_CheckpointBarrier.SM_CheckpointBarrier"), B + FVector(-600, 200, 0), 90.f, 85.f);
+	}
+	if (Def.bChallengeArena) BuildChallengeArena();
 	SpawnZombies();
 	if (USoundBase* Amb = LoadObject<USoundBase>(nullptr, TEXT("/Game/Audio/ambience.ambience")))
 		Ambience = UGameplayStatics::SpawnSound2D(this, Amb, 0.8f, 1.f, 0.f, nullptr, true, true);
@@ -507,6 +533,10 @@ void AFOWorldBuilder::BuildCars()
 	{
 		const float X = Rng.FRandRange(700.f, StreetLength - 800.f);
 		const float Y = Rng.FRandRange(-StreetWidth * 0.35f, StreetWidth * 0.35f);
+		bool bNearPuzzle = false;
+		for (const FFOPuzzleDef& P : LevelDef->Puzzles)
+			if (FMath::Abs(X - P.Location.X) < 1000.f) { bNearPuzzle = true; break; }
+		if (bNearPuzzle) continue; // keep objective approaches free of parked-car collisions
 		const bool bBurnt = Rng.FRand() < 0.35f;
 		UStaticMeshComponent* C = Prop(Cars[i % 5], FVector(X, Y, 0), Rng.FRandRange(0, 360.f), 150.f, bBurnt ? Burnt : nullptr);
 		if (C && bBurnt) Light(FVector(X, Y, 90.f), FLinearColor(1.f, 0.35f, 0.08f), 6.f, 300.f); // embers
@@ -523,7 +553,11 @@ void AFOWorldBuilder::BuildDebris()
 	for (int32 i = 0; i < 26; i++)
 	{
 		const float S = Rng.FRandRange(25.f, 80.f);
-		Box(FVector(Rng.FRandRange(500.f, StreetLength - 300.f), Rng.FRandRange(-600.f, 600.f), S * 0.3f), FVector(S, S * 0.8f, S * 0.6f), Concrete, FRotator(Rng.FRandRange(-10, 10), Rng.FRandRange(0, 360.f), Rng.FRandRange(-10, 10)));
+		const FVector Loc(Rng.FRandRange(500.f, StreetLength - 300.f), Rng.FRandRange(-600.f, 600.f), S * 0.3f);
+		bool bNearPuzzle = false;
+		for (const FFOPuzzleDef& P : LevelDef->Puzzles)
+			if (FMath::Abs(Loc.X - P.Location.X) < 1000.f) { bNearPuzzle = true; break; }
+		if (!bNearPuzzle) Box(Loc, FVector(S, S * 0.8f, S * 0.6f), Concrete, FRotator(Rng.FRandRange(-10, 10), Rng.FRandRange(0, 360.f), Rng.FRandRange(-10, 10)));
 	}
 	// trash bags on the sidewalks
 	for (int32 i = 0; i < 14; i++)
@@ -573,6 +607,119 @@ void AFOWorldBuilder::BuildExitGate()
 	Box(FVector(Gx + 60.f, 0, 600.f), FVector(60.f, 4000.f, 1200.f), Surface({ TEXT("concrete"), 200.f, FLinearColor(0.35f, 0.35f, 0.38f) }));
 }
 
+// ------------------------------------------------------------------ challenge arena
+/** Imported survival props keep no mesh collision: the arena authors explicit Blocker() boxes so a
+ *  market awning can never seal off the space under it and the AI (no pathfinding) is never trapped. */
+static UStaticMeshComponent* NoCollide(UStaticMeshComponent* C)
+{
+	if (C) C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	return C;
+}
+
+void AFOWorldBuilder::Blocker(const FVector& Center, const FVector& Extent)
+{
+	UBoxComponent* B = NewObject<UBoxComponent>(this);
+	B->SetupAttachment(RootComponent);
+	B->SetBoxExtent(Extent);
+	B->SetWorldLocation(Center);
+	B->SetCollisionProfileName(TEXT("BlockAll"));
+	B->RegisterComponent();
+}
+
+/**
+ * Compact authored layout used by both challenge modes (StreetLength ~30-40 m, no long empty walk).
+ *
+ * PARENT INTEGRATION HOOK: the six generated survival props are referenced through the table below
+ * only. If the final asset names differ, edit these six paths (and nothing else). Every Prop() call
+ * degrades gracefully: a missing mesh logs a warning and the primitive fallback geometry built here
+ * still provides the same cover / landmark layout, so the modes stay playable un-cooked.
+ *
+ * Cover rule: barricade rows are short, staggered segments with wide gaps. The zombie AI has no
+ * pathfinding, so no mandatory enemy route is ever sealed off by continuous cover, and the market
+ * awning gets no collision (only its poles) so the player can walk underneath.
+ */
+void AFOWorldBuilder::BuildChallengeArena()
+{
+	// --- generated survival props (names as planned 2026-09-07; adjust here if they change)
+	static const TCHAR* P_RadioMast    = TEXT("/Game/Props/Survival/SM_SurvivalRadioMast/SM_SurvivalRadioMast.SM_SurvivalRadioMast");
+	static const TCHAR* P_SupplyLocker = TEXT("/Game/Props/Survival/SM_SurvivalSupplyLocker/SM_SurvivalSupplyLocker.SM_SurvivalSupplyLocker");
+	static const TCHAR* P_MedStation   = TEXT("/Game/Props/Survival/SM_SurvivalMedStation/SM_SurvivalMedStation.SM_SurvivalMedStation");
+	static const TCHAR* P_Sandbag      = TEXT("/Game/Props/Survival/SM_SurvivalSandbagBarricade/SM_SurvivalSandbagBarricade.SM_SurvivalSandbagBarricade");
+	static const TCHAR* P_EvacBeacon   = TEXT("/Game/Props/Survival/SM_SurvivalEvacBeacon/SM_SurvivalEvacBeacon.SM_SurvivalEvacBeacon");
+	static const TCHAR* P_MarketStall  = TEXT("/Game/Props/Survival/SM_SurvivalMarketStall/SM_SurvivalMarketStall.SM_SurvivalMarketStall");
+
+	const float L = StreetLength;
+	UMaterialInstanceDynamic* Sandbag = Surface({ TEXT("concrete"), 120.f, FLinearColor(0.42f, 0.38f, 0.28f) });
+	UMaterialInstanceDynamic* Metal = Flat(FLinearColor(0.22f, 0.23f, 0.25f), 0.45f, 0.6f);
+	UMaterialInstanceDynamic* Beacon = Flat(FLinearColor(0.05f, 0.2f, 0.08f), 0.5f, 0.f, FLinearColor(0.1f, 0.9f, 0.3f) * 2.f);
+
+	// 1. Staggered sandbag cover, three short rows with 500+ cm gaps on alternating sides.
+	const float Rows[] = { L * 0.28f, L * 0.50f, L * 0.72f };
+	for (int32 i = 0; i < 3; i++)
+	{
+		const float X = Rows[i];
+		const float Y = (i % 2 == 0) ? -260.f : 260.f;
+		for (int32 Seg = 0; Seg < 2; Seg++)
+		{
+			const FVector Base(X + Seg * 260.f, Y + (Seg ? 90.f : -90.f), 0.f);
+			// Imported barricade's long axis is local Y; align it with the authored X cover box.
+			if (!NoCollide(Prop(P_Sandbag, Base, 90.f, 95.f)))
+				Box(Base + FVector(0, 0, 45.f), FVector(220.f, 70.f, 90.f), Sandbag);   // fallback cover
+			else
+				Blocker(Base + FVector(0, 0, 45.f), FVector(110.f, 40.f, 45.f));        // imported mesh has no collision
+		}
+	}
+
+	// 2. Resupply station: locker + med station flanking the arena centre (matches ResupplyPoints).
+	{
+		const FVector Hub(L * 0.42f, 320.f, 0.f);
+		if (!NoCollide(Prop(P_SupplyLocker, Hub, -90.f, 188.f))) Box(Hub + FVector(0, 0, 94.f), FVector(70.f, 130.f, 188.f), Metal);
+		else Blocker(Hub + FVector(0, 0, 94.f), FVector(35.f, 65.f, 94.f));
+		const FVector Med(L * 0.42f + 260.f, 320.f, 0.f);
+		if (!NoCollide(Prop(P_MedStation, Med, -90.f, 205.f))) Box(Med + FVector(0, 0, 65.f), FVector(60.f, 110.f, 130.f), Flat(FLinearColor(0.5f, 0.1f, 0.1f), 0.6f));
+		else Blocker(Med + FVector(0, 0, 60.f), FVector(30.f, 55.f, 60.f));
+		Light(Hub + FVector(120.f, -120.f, 260.f), FLinearColor(0.9f, 0.75f, 0.45f), 14.f, 1200.f);
+	}
+
+	// 3. Radio mast landmark so the player can always orient inside the compact arena.
+	{
+		// Keep clear of Supply Run's mandatory crate at (2500,-400).
+		const FVector Mast(L * 0.62f - 240.f, -540.f, 0.f);
+		if (!NoCollide(Prop(P_RadioMast, Mast, 20.f, 319.f))) Cyl(Mast, 22.f, 319.f, Metal, FRotator::ZeroRotator, true);
+		else Blocker(Mast + FVector(0, 0, 150.f), FVector(45.f, 45.f, 150.f));
+		Light(Mast + FVector(0, 0, 330.f), FLinearColor(1.f, 0.25f, 0.2f), 10.f, 1400.f);
+	}
+
+	// 4. Market stalls: visual clutter with walk-through awnings (poles block, canopy does not).
+	for (int32 i = 0; i < 2; i++)
+	{
+		const FVector Stall(L * (0.34f + 0.30f * i), i == 0 ? 430.f : -430.f, 0.f);
+		if (!NoCollide(Prop(P_MarketStall, Stall, i == 0 ? -90.f : 90.f, 218.39f)))
+		{
+			Box(Stall + FVector(0, 0, 235.f), FVector(260.f, 180.f, 12.f), Sandbag, FRotator::ZeroRotator, false); // canopy, no collision
+			Box(Stall + FVector(0, 0, 45.f), FVector(200.f, 60.f, 90.f), Sandbag);                                 // counter
+		}
+		else
+		{
+			// Poles only: leave the space under the awning walkable.
+			Blocker(Stall + FVector(-110.f, -80.f, 110.f), FVector(15.f, 15.f, 110.f));
+			Blocker(Stall + FVector(110.f, -80.f, 110.f), FVector(15.f, 15.f, 110.f));
+		}
+	}
+
+	// 5. Extraction pad right in front of the existing exit gate / trigger (supply run win zone).
+	{
+		const FVector Pad(L + 40.f, 0.f, 0.f);
+		Quad(FVector(Pad.X - 160.f, 0.f, 6.f), FVector2D(420.f, 420.f), Beacon, FRotator::ZeroRotator);
+		if (!NoCollide(Prop(P_EvacBeacon, Pad + FVector(-60.f, 260.f, 0.f), -90.f, 299.f)))
+			Cyl(Pad + FVector(-60.f, 260.f, 0.f), 30.f, 170.f, Beacon, FRotator::ZeroRotator, true);
+		else
+			Blocker(Pad + FVector(-60.f, 260.f, 85.f), FVector(35.f, 35.f, 85.f));
+		Light(Pad + FVector(-200.f, 0.f, 220.f), FLinearColor(0.25f, 1.f, 0.4f), 16.f, 1500.f);
+	}
+	UE_LOG(LogFO, Display, TEXT("Challenge arena built over %.0f cm"), L);
+}
+
 void AFOWorldBuilder::ApplyBrightness(float Mul)
 {
 	Bright = FMath::Clamp(Mul, 0.25f, 4.f);
@@ -618,6 +765,7 @@ void AFOWorldBuilder::SpawnPuzzles()
 		{
 		case EFOPuzzleType::BreakerSequence: Cls = AFOBreakerPuzzle::StaticClass(); break;
 		case EFOPuzzleType::Keypad:          Cls = AFOKeypadPuzzle::StaticClass(); break;
+		case EFOPuzzleType::Generator:       Cls = AFOGeneratorPuzzle::StaticClass(); break;
 		}
 		if (!Cls) continue;
 		AFOPuzzleBase* P = GetWorld()->SpawnActor<AFOPuzzleBase>(Cls, PD.Location, FRotator(0, PD.Yaw, 0));
@@ -645,7 +793,8 @@ void AFOWorldBuilder::SpawnZombies()
 		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = i % 4;
-			Z->bRunner = Rng.FRand() < LevelDef->RunnerChance;
+			const bool bRollRunner = Rng.FRand() < LevelDef->RunnerChance;
+			Z->bRunner = Z->Variant != 2 && bRollRunner; // police silhouette always teaches heavy role
 			Z->HpMul = LevelDef->ZombieHpMul;
 			UGameplayStatics::FinishSpawningActor(Z, T);
 		}
@@ -677,7 +826,9 @@ void AFOWorldBuilder::Tick(float Dt)
 	// BeginOverlap alone would require leaving and re-entering to finish.
 	if (ExitTrigger)
 		if (AFOGameMode* GM = GetWorld()->GetAuthGameMode<AFOGameMode>())
-			if (GM->State == EFOState::Playing && GM->Mission && GM->Mission->IsExitOpen())
+			// Mode-aware: campaign Reach objective OR challenge extraction (collecting the last
+			// supply while already standing on the pad must still finish the run).
+			if (GM->State == EFOState::Playing && GM->IsExitUsable())
 				if (AFOCharacter* P = GM->Player())
 					if (ExitTrigger->IsOverlappingActor(P))
 						GM->ReportEvent(FFOGameEvent(EFOGameEvent::ExitReached));

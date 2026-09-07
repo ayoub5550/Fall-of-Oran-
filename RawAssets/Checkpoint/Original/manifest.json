@@ -1,0 +1,12 @@
+{
+  "SM_CheckpointGenerator": {
+    "triangles": 228,
+    "parts": 19,
+    "source": "original procedural geometry"
+  },
+  "SM_CheckpointBarrier": {
+    "triangles": 120,
+    "parts": 10,
+    "source": "original procedural geometry"
+  }
+}

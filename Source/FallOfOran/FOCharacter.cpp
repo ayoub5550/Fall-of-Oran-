@@ -298,7 +298,9 @@ void AFOCharacter::Tick(float Dt)
 	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bSprintingNow ? SprintCamLength : 260.f, Dt, 4.f);
 
 	// --- animation state
-	if (OneShotTimer <= 0.f)
+	// Single-node clips cannot layer an upper-body shot over locomotion. Keep
+	// legs moving rather than slide a standing firing pose across the street.
+	if (OneShotTimer <= 0.f || (CurrentAnim == EFOAnim::Shoot && Spd > 20.f))
 	{
 		if (Spd > WalkSpeed + 30.f) PlayAnim(EFOAnim::Run, true, FMath::Clamp(Spd / SprintSpeed, 0.8f, 1.15f));
 		else if (Spd > 20.f) PlayAnim(bInjured ? EFOAnim::InjuredWalk : EFOAnim::Walk, true, FMath::Clamp(Spd / 220.f, 0.7f, 1.3f));
@@ -320,7 +322,7 @@ void AFOCharacter::BindWeaponEvents()
 {
 	Weapon->OnFired.AddLambda([this]() {
 		MuzzleTimer = 0.06f;
-		PlayAnim(EFOAnim::Shoot, false, 1.6f);
+		if (GetVelocity().Size2D() <= 20.f) PlayAnim(EFOAnim::Shoot, false, 1.6f);
 		if (GunSound) UGameplayStatics::PlaySoundAtLocation(this, GunSound, GetActorLocation());
 	});
 	Weapon->OnDryFire.AddLambda([this]() { if (ClickSound) UGameplayStatics::PlaySound2D(this, ClickSound); });

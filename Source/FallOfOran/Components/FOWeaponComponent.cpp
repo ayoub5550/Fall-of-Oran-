@@ -43,9 +43,14 @@ AFOZombie* UFOWeaponComponent::FindAimAssistTarget(const FVector& Start, const F
 		const float D = To.Size();
 		if (D > Stats.Range) continue;
 		// Cone shrinks with distance: generous up close, precise far away (feels fair on touch screens).
-		const float Cone = FMath::Clamp(190.f / FMath::Max(D / 100.f, 1.f), Stats.AimAssistMinCone, Stats.AimAssistMaxCone);
-		const float Ang = FMath::Acos(FVector::DotProduct(To.GetSafeNormal(), Dir));
-		if (Ang < Cone && D < BestD) { BestD = D; Best = Z; }
+		const float Cone = FMath::Lerp(Stats.AimAssistMaxCone, Stats.AimAssistMinCone, FMath::Clamp(D / FMath::Max(Stats.Range, 1.f), 0.f, 1.f));
+		const float Ang = FMath::Acos(FMath::Clamp(FVector::DotProduct(To.GetSafeNormal(), Dir.GetSafeNormal()), -1.f, 1.f));
+		if (Ang >= Cone || D >= BestD) continue;
+		FHitResult Sight;
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(FOAimAssist), true, GetOwner());
+		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Sight, Start, Start + To, ECC_Visibility, QP);
+		if (bBlocked && Sight.GetActor() != Z) continue;
+		BestD = D; Best = Z;
 	}
 	return Best;
 }

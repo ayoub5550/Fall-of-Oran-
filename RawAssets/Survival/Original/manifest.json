@@ -1,0 +1,146 @@
+{
+  "SM_SurvivalRadioMast": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalRadioMast.glb",
+    "triangles": 384,
+    "parts": 29,
+    "bounds_min_m": [
+      -0.5,
+      0.0,
+      -0.5
+    ],
+    "bounds_max_m": [
+      0.5,
+      3.19,
+      0.5
+    ],
+    "size_m": [
+      1.0,
+      3.19,
+      1.0
+    ],
+    "bytes": 18244,
+    "sha256": "3b520ae1a6c4f6d0307e0d969acebf1b1a1af6c31aa6e73de9b0eaf198e156f9",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  },
+  "SM_SurvivalSupplyLocker": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalSupplyLocker.glb",
+    "triangles": 192,
+    "parts": 16,
+    "bounds_min_m": [
+      -0.41,
+      0.0,
+      -0.27
+    ],
+    "bounds_max_m": [
+      0.32,
+      1.88,
+      0.27
+    ],
+    "size_m": [
+      0.73,
+      1.88,
+      0.54
+    ],
+    "bytes": 10176,
+    "sha256": "041d3fb3542e27d3c7d1b476f486df501f19336db2ad5956b3d0e2c2fcebdaa0",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  },
+  "SM_SurvivalMedStation": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalMedStation.glb",
+    "triangles": 336,
+    "parts": 22,
+    "bounds_min_m": [
+      -0.315,
+      0.0,
+      -0.61
+    ],
+    "bounds_max_m": [
+      0.29,
+      2.05,
+      0.7
+    ],
+    "size_m": [
+      0.605,
+      2.05,
+      1.31
+    ],
+    "bytes": 16224,
+    "sha256": "a8241ea9dff80ace99296fab2b423c541eb13b7bf5f9253d6200a36822ce03db",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  },
+  "SM_SurvivalSandbagBarricade": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalSandbagBarricade.glb",
+    "triangles": 288,
+    "parts": 24,
+    "bounds_min_m": [
+      -0.21,
+      0.0,
+      -1.405
+    ],
+    "bounds_max_m": [
+      0.21,
+      0.95,
+      1.405
+    ],
+    "size_m": [
+      0.42,
+      0.95,
+      2.81
+    ],
+    "bytes": 15432,
+    "sha256": "21fa3d6c5397bdaa83097d5e321c079580e9cbf177a0693aac14bc9f9aed8d54",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  },
+  "SM_SurvivalEvacBeacon": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalEvacBeacon.glb",
+    "triangles": 260,
+    "parts": 14,
+    "bounds_min_m": [
+      -0.47,
+      0.0,
+      -0.26
+    ],
+    "bounds_max_m": [
+      0.26,
+      2.99,
+      0.26
+    ],
+    "size_m": [
+      0.73,
+      2.99,
+      0.52
+    ],
+    "bytes": 11804,
+    "sha256": "287f663d09fae1437e00d1abb7e48f6b04a07b3a4a5db2e8f8a9147f4f70d977",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  },
+  "SM_SurvivalMarketStall": {
+    "file": "RawAssets/Survival/Original/SM_SurvivalMarketStall.glb",
+    "triangles": 300,
+    "parts": 25,
+    "bounds_min_m": [
+      -0.89,
+      0.0,
+      -1.18
+    ],
+    "bounds_max_m": [
+      0.89,
+      2.1839,
+      1.18
+    ],
+    "size_m": [
+      1.7801,
+      2.1839,
+      2.36
+    ],
+    "bytes": 15180,
+    "sha256": "0d09a66362d39deab516bd59c548e1a450329ccf4bc6fafc7d04af0289071b14",
+    "source": "original procedural geometry",
+    "validation": "reloaded GLB: finite, grounded, nondegenerate, watertight parts, vertex colours, <1500 triangles"
+  }
+}

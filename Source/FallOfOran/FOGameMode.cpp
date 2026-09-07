@@ -6,7 +6,9 @@
 #include "FOHud.h"
 #include "Core/FOGameInstance.h"
 #include "Core/FOLevelRegistry.h"
+#include "Core/FOChallengeRegistry.h"
 #include "Mission/FOMissionComponent.h"
+#include "Mission/FOChallengeComponent.h"
 #include "Puzzles/FOKeypadPuzzle.h"
 #include "Mission/FOObjective.h"
 #include "Components/FOHealthComponent.h"
@@ -38,6 +40,7 @@ AFOGameMode::AFOGameMode()
 	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = AFOCharacter::StaticClass();
 	Mission = CreateDefaultSubobject<UFOMissionComponent>(TEXT("Mission"));
+	Challenge = CreateDefaultSubobject<UFOChallengeComponent>(TEXT("Challenge"));
 }
 
 AFOCharacter* AFOGameMode::Player() const { return Cast<AFOCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)); }
@@ -46,10 +49,30 @@ void AFOGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 	UFOGameInstance* GI = UFOGameInstance::Get(this);
-	Level = GI ? GI->CurrentLevel() : FFOLevelRegistry::Get(0);
-	LevelIndex = GI ? GI->CurrentLevelIndex() : 0;
+	Flow = GI ? GI->FlowMode() : EFOFlowMode::Campaign;
+	const FFOChallengeDef* ChallengeDef = GI ? GI->CurrentChallenge() : nullptr;
+	if (Flow != EFOFlowMode::Campaign && (!ChallengeDef || !ChallengeDef->IsValid()))
+	{
+		UE_LOG(LogFO, Warning, TEXT("GameMode: challenge mode %d unavailable, falling back to campaign"), (int32)Flow);
+		Flow = EFOFlowMode::Campaign;
+		ChallengeDef = nullptr;
+		if (GI) GI->SetFlowMode(EFOFlowMode::Campaign);
+	}
+	if (ChallengeDef)
+	{
+		// Compact authored arena built from the challenge definition; the campaign registry is untouched.
+		ChallengeLevel = FFOChallengeRegistry::MakeLevelDef(*ChallengeDef);
+		Level = &ChallengeLevel;
+		LevelIndex = GI ? GI->CurrentLevelIndex() : 0;   // kept for HUD/campaign selection, never written on a challenge win
+		ChallengeId = ChallengeDef->Id;
+	}
+	else
+	{
+		Level = GI ? GI->CurrentLevel() : FFOLevelRegistry::Get(0);
+		LevelIndex = GI ? GI->CurrentLevelIndex() : 0;
+	}
 	check(Level);
-	UE_LOG(LogFO, Display, TEXT("GameMode: level %d '%s'"), LevelIndex + 1, *Level->Title);
+	UE_LOG(LogFO, Display, TEXT("GameMode: flow %d, level '%s'"), (int32)Flow, *Level->Title);
 
 	// World first (puzzles/notes need the mission to exist but not to be started), then mission, then HUD.
 	World = GetWorld()->SpawnActor<AFOWorldBuilder>(AFOWorldBuilder::StaticClass(), FTransform::Identity);
@@ -58,9 +81,19 @@ void AFOGameMode::BeginPlay()
 		World->BuildWorld(*Level);
 		World->ApplyBrightness(GI ? GI->Brightness() : 1.f);
 	}
-	Mission->OnHint.AddLambda([this](const FString& T) { SetHint(T, 5.f); });
-	Mission->OnMissionComplete.AddLambda([this]() { Win(); });
-	Mission->Start(*Level);
+	if (IsChallenge() && ChallengeDef)
+	{
+		// The campaign mission machine stays idle in challenge modes (no stages, no unlocking).
+		Challenge->OnHint.AddLambda([this](const FString& T) { SetHint(T, 4.f); });
+		Challenge->OnCleared.AddLambda([this]() { Win(); });
+		Challenge->OnFailed.AddLambda([this](const FString& R) { FailChallenge(R); });
+	}
+	else
+	{
+		Mission->OnHint.AddLambda([this](const FString& T) { SetHint(T, 5.f); });
+		Mission->OnMissionComplete.AddLambda([this]() { Win(); });
+		Mission->Start(*Level);
+	}
 
 	if (GEngine && GEngine->GameViewport)
 	{
@@ -84,6 +117,11 @@ void AFOGameMode::BeginPlay()
 	bSelfTest = FParse::Param(FCommandLine::Get(), TEXT("FOSelfTest"));
 	{ int32 Skip = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotSkip="), Skip)) ShotIndex = Skip; } // -FOShotSkip=3 renders only the puzzle view
 	if (bShotMode) GAreScreenMessagesEnabled = false;
+	if (GI && GI->bContinueIntoLevel)
+	{
+		GI->bContinueIntoLevel = false;
+		StartGame();
+	}
 }
 
 void AFOGameMode::EndPlay(const EEndPlayReason::Type Reason)
@@ -106,6 +144,17 @@ void AFOGameMode::Tick(float Dt)
 	if (HintTimer > 0.f) { HintTimer -= Dt; if (HintTimer <= 0.f) Hint.Empty(); }
 	if (NoteTimer > 0.f) { NoteTimer -= Dt; if (NoteTimer <= 0.f) NoteText.Empty(); }
 	if (RestartTimer > 0.f) RestartTimer -= Dt;
+	if (FParse::Param(FCommandLine::Get(), TEXT("FOEncounterTest")))
+	{
+		RunEncounterValidation();
+		return;
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("FOChallengeTest")))
+	{
+		if (!bChallengeTestRan) { bChallengeTestRan = true; RunChallengeValidation(); }
+		return;
+	}
+	if (IsChallenge() && State == EFOState::Playing && Challenge) Challenge->Advance(Dt);
 	if (bShotMode) TickShots(Dt);
 	if (bSelfTest) TickSelfTest(Dt);
 }
@@ -117,16 +166,26 @@ void AFOGameMode::StartGame()
 	{
 		State = EFOState::Playing;
 		if (!Level->Intro.IsEmpty()) SetHint(Level->Intro, 5.f);
+		if (IsChallenge())
+		{
+			UFOGameInstance* GI = UFOGameInstance::Get(this);
+			if (GI) GI->NoteChallengeAttempt(ChallengeId);
+			const FFOChallengeDef* Def = GI ? GI->CurrentChallenge() : nullptr;
+			if (!Def) { FailChallenge(TEXT("تعذّر تحميل التحدي")); return; }
+			Challenge->Start(*Def);   // an invalid definition fails here; it can never instantly win
+			return;
+		}
 		// Empty missions can complete during BeginPlay, before the player starts.
 		if (Mission && Mission->IsComplete()) Win();
 		return;
 	}
 	if (RestartTimer > 0.f) return;
-	if (State == EFOState::Dead) { Restart(); return; }
+	if (State == EFOState::Dead) { Restart(); return; }   // retry the same challenge / level
 	if (State == EFOState::Won)
 	{
 		UFOGameInstance* GI = UFOGameInstance::Get(this);
-		if (GI && !bCampaignDone) GI->AdvanceToNextLevel();
+		if (IsChallenge()) { Restart(); return; }          // challenges never advance the campaign
+		if (GI && !bCampaignDone) GI->bContinueIntoLevel = GI->AdvanceToNextLevel();
 		else if (GI) GI->SelectLevel(0);
 		Restart();
 	}
@@ -145,14 +204,73 @@ void AFOGameMode::SelectRelativeLevel(int32 Delta)
 	Restart();
 }
 
+void AFOGameMode::SelectRelativeMode(int32 Delta)
+{
+	if (State != EFOState::Menu) return;
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	if (!GI) return;
+	const EFOFlowMode Before = GI->FlowMode();
+	GI->CycleFlowMode(Delta);
+	if (GI->FlowMode() == Before) { SetHint(TEXT("لا يوجد طور آخر متاح"), 3.f); return; }
+	GI->bContinueIntoLevel = false;
+	Restart();
+}
+
+void AFOGameMode::ReturnToMenu()
+{
+	// Reload the same map and stop at the menu (no campaign advance, no challenge auto-start).
+	if (UFOGameInstance* GI = UFOGameInstance::Get(this)) GI->bContinueIntoLevel = false;
+	Restart();
+}
+
+void AFOGameMode::FailChallenge(const FString& Reason)
+{
+	if (State != EFOState::Playing) return;
+	State = EFOState::Dead;
+	CloseKeypad();
+	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	if (GI && IsChallenge())
+		GI->OnChallengeFinished(ChallengeId, false, Challenge ? Challenge->WavesCleared() : 0, Kills, 0.f, 0.f);
+	Subtitle = FString::Printf(TEXT("%s\nقتلت %d — المس الشاشة للمحاولة من جديد أو اختر «القائمة»"), *Reason, Kills);
+	RestartTimer = 2.f;
+}
+
+FString AFOGameMode::GetChallengeStatusLine() const
+{
+	return (IsChallenge() && Challenge && (Challenge->IsActive() || Challenge->IsCleared())) ? Challenge->GetStatusLine() : FString();
+}
+
+FString AFOGameMode::GetModeName() const
+{
+	switch (Flow)
+	{
+	case EFOFlowMode::Survival:  return TEXT("طور الصمود");
+	case EFOFlowMode::SupplyRun: return TEXT("طور خط الإمداد");
+	default:                     return TEXT("الحملة");
+	}
+}
+
 void AFOGameMode::Win()
 {
 	if (State != EFOState::Playing) return;
 	State = EFOState::Won;
 	UFOGameInstance* GI = UFOGameInstance::Get(this);
+	const int32 M = (int32)LevelTime / 60, S = (int32)LevelTime % 60;
+	if (IsChallenge())
+	{
+		// Challenge results live in their own save slot: no unlocking, no campaign writes.
+		const float TimeLeft = Challenge ? Challenge->TimeRemaining() : 0.f;
+		if (GI) GI->OnChallengeFinished(ChallengeId, true, Challenge ? Challenge->WavesCleared() : 0, Kills, LevelTime, TimeLeft);
+		const FFOChallengeRecord* Rec = GI ? GI->ChallengeRecord(ChallengeId) : nullptr;
+		FString Best;
+		if (Rec) Best = FString::Printf(TEXT("\nأفضل نتيجة: %d قتيل — %.0f ث"), Rec->BestKills, Rec->BestClearSeconds);
+		Subtitle = FString::Printf(TEXT("%s\nالقتلى: %d — الوقت %d:%02d%s\nالمس الشاشة لإعادة التحدي أو اختر «القائمة»"),
+			*Level->OutroText, Kills, M, S, *Best);
+		RestartTimer = 2.5f;
+		return;
+	}
 	if (GI) GI->OnLevelCompleted(LevelIndex, Kills, LevelTime);
 	bCampaignDone = LevelIndex + 1 >= FFOLevelRegistry::Num();
-	const int32 M = (int32)LevelTime / 60, S = (int32)LevelTime % 60;
 	Subtitle = FString::Printf(TEXT("%s\nالقتلى: %d — الوقت %d:%02d\n%s"), *Level->OutroText, Kills, M, S,
 		bCampaignDone ? TEXT("أنهيت الحملة كاملة! المس الشاشة للعودة إلى البداية") : TEXT("المس الشاشة للمستوى التالي"));
 	RestartTimer = 2.5f;
@@ -169,13 +287,17 @@ void AFOGameMode::ReportEvent(const FFOGameEvent& E)
 		if (AFOCharacter* P = Player()) P->Kills += E.Count;
 		break;
 	case EFOGameEvent::ItemCollected:
-		if (E.Tag == TEXT("fuel")) SpawnZombiesBehindPlayer(2); // the horde hears the can clatter
+		// The clatter ambush belongs to the campaign fuel cans only. Challenge supply crates use the
+		// "supply" tag on purpose so this rule can never be reused as a hidden challenge spawner.
+		if (!IsChallenge() && E.Tag == TEXT("fuel")) SpawnZombiesBehindPlayer(2);
 		break;
 	case EFOGameEvent::ExitReached:
-		if (!Mission->IsExitOpen()) { SetHint(TEXT("البوابة مقفلة! أكمل الهدف الحالي أولاً 🔒"), 3.f); return; }
+		if (!IsChallenge() && !Mission->IsExitOpen()) { SetHint(TEXT("البوابة مقفلة! أكمل الهدف الحالي أولاً 🔒"), 3.f); return; }
+		// Challenge extraction rules (including the "locked" hint) live in the challenge component.
 		break;
 	default: break;
 	}
+	if (IsChallenge()) { if (Challenge) Challenge->HandleEvent(E); return; }
 	Mission->HandleEvent(E);
 }
 
@@ -184,6 +306,11 @@ void AFOGameMode::OnPlayerDamaged() { DamageFlash = 0.35f; }
 void AFOGameMode::OnPlayerDied()
 {
 	if (State != EFOState::Playing) return;
+	if (IsChallenge() && Challenge && Challenge->IsActive())
+	{
+		Challenge->NotifyPlayerDied();   // routes back through FailChallenge with the mode's reason text
+		return;
+	}
 	State = EFOState::Dead;
 	CloseKeypad();
 	Subtitle = FString::Printf(TEXT("قتلت %d زومبي — المس الشاشة للمحاولة من جديد"), Kills);
@@ -197,12 +324,22 @@ void AFOGameMode::OnPuzzleFailed(const FString& Message, int32 PenaltyZombies)
 	SpawnZombiesBehindPlayer(PenaltyZombies);
 }
 
+bool AFOGameMode::IsExitUsable() const
+{
+	if (IsChallenge()) return Challenge && Challenge->IsExtractionOpen();
+	return Mission && Mission->IsExitOpen();
+}
+
 bool AFOGameMode::IsPuzzleActive(FName Id) const { return Mission && Mission->IsPuzzleActive(Id); }
 
 // ------------------------------------------------------------------ HUD helpers
 void AFOGameMode::SetHint(const FString& Text, float Seconds) { Hint = Text; HintTimer = Seconds; }
 void AFOGameMode::ShowNote(const FString& Text, float Seconds) { NoteText = Text; NoteTimer = Seconds; }
-FString AFOGameMode::GetObjectiveText() const { return Mission ? Mission->GetObjectiveText() : FString(); }
+FString AFOGameMode::GetObjectiveText() const
+{
+	if (IsChallenge()) return Challenge ? Challenge->GetObjectiveText() : FString();
+	return Mission ? Mission->GetObjectiveText() : FString();
+}
 
 void AFOGameMode::AdjustBrightness(float Step)
 {
@@ -246,7 +383,7 @@ void AFOGameMode::SpawnZombiesBehindPlayer(int32 Count)
 		if (AFOZombie* Z = GetWorld()->SpawnActorDeferred<AFOZombie>(AFOZombie::StaticClass(), T))
 		{
 			Z->Variant = FMath::RandRange(0, 3);
-			Z->bRunner = FMath::FRand() < 0.35f;
+			Z->bRunner = Z->Variant != 2 && FMath::FRand() < 0.35f;
 			Z->bChasing = true;
 			Z->HpMul = Level->ZombieHpMul;
 			UGameplayStatics::FinishSpawningActor(Z, T);
@@ -257,6 +394,13 @@ void AFOGameMode::SpawnZombiesBehindPlayer(int32 Count)
 // ------------------------------------------------------------------ self test
 void AFOGameMode::TickSelfTest(float Dt)
 {
+	if (IsChallenge())
+	{
+		// -FOSelfTest drives campaign stages; challenge rules have their own check (-FOChallengeTest).
+		bSelfTest = false;
+		UE_LOG(LogFO, Display, TEXT("SELFTEST SKIP: challenge flow active, use -FOChallengeTest"));
+		return;
+	}
 	SelfTestClock += Dt;
 	if (SelfTestClock < 1.f) return;
 	if (State == EFOState::Menu)
@@ -373,7 +517,8 @@ void AFOGameMode::TickShots(float Dt)
 		const FFOPuzzleDef& P = Level->Puzzles[0];
 		const FVector Face = FRotator(0, P.Yaw, 0).Vector() * -1.f; // puzzle front (-X local)
 		const FVector Side = FVector::CrossProduct(Face, FVector::UpVector);
-		Shots.Add({ P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f), (P.Location + FVector(0, 0, 150.f) - (P.Location + Face * 380.f + Side * 90.f + FVector(0, 0, 100.f))).Rotation(), false });
+		const FVector ViewPos = P.Location + Face * 420.f + Side * 180.f + FVector(0, 0, 100.f);
+		Shots.Add({ ViewPos, (P.Location + FVector(0, 0, 40.f) - ViewPos).Rotation(), false });
 	}
 	int32 Num = Shots.Num();
 	{ int32 Max = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotMax="), Max) && Max > 0) Num = FMath::Min(Num, Max); }

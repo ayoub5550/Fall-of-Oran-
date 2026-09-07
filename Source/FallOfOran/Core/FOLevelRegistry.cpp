@@ -23,16 +23,26 @@ static TArray<FFOLevelDef> BuildCampaign()
 		FFOLevelDef L;
 		L.Id = TEXT("boulevard");
 		L.Title = TEXT("شارع العربي بن مهيدي");
-		L.Intro = TEXT("سقطت وهران. اجمع الوقود وافتح بوابة الميناء.");
+		L.Intro = TEXT("آخر قارب ينتظر في الميناء. شغّل مولّد الحاجز أولًا للوصول إلى محطة الكهرباء.");
 		L.Seed = 20260906; L.StreetLength = 9000.f; L.ZombieCount = 16; L.RunnerChance = 0.2f;
 		L.Items.Add(Item(EFOItem::Fuel, FVector(1800, -420, 50), TEXT("fuel")));
 		L.Items.Add(Item(EFOItem::Fuel, FVector(4800, 400, 50), TEXT("fuel")));
 		L.Items.Add(Item(EFOItem::Fuel, FVector(7800, -300, 50), TEXT("fuel")));
 		AddSupplies(L, { {2800, 250, 40}, {5800, -450, 40}, {7200, 350, 40} },
 		               { {1400, -200, 40}, {3800, 450, 40}, {4400, -400, 40}, {6600, 150, 40} });
-		L.Stages.Add(Stage({ Obj(EFOObjectiveType::Collect, TEXT("fuel"), 3, TEXT("اجمع عبوات الوقود {n}/{max} ⛽"), TEXT("الهدف: اجمع 3 عبوات وقود لفتح بوابة الميناء"), TEXT("البوابة فُتحت! اهرب إلى الميناء 🟢")) }));
-		L.Stages.Add(Stage({ Obj(EFOObjectiveType::Reach, NAME_None, 1, TEXT("اهرب إلى بوابة الميناء 🟢")) }));
-		L.OutroText = TEXT("عبرت البوابة… لكن الميناء ليس آمنًا بعد.");
+		FFOPuzzleDef Generator; Generator.Type = EFOPuzzleType::Generator; Generator.Id = TEXT("checkpoint_generator");
+		Generator.Location = FVector(8250, -400, 0); Generator.Yaw = -90.f;
+		L.Puzzles.Add(Generator);
+		L.Items.Add(Item(EFOItem::Note, FVector(650, -260, 60), TEXT("radio_brief"),
+			TEXT("رسالة من الميناء:\nالقارب موجود، لكن طريق الإخلاء مقطوع. وقود السيارات يكفي لمولّد الحاجز. بعده توجّه إلى محطة سيدي الهواري لإعادة تيار بوابة الميناء.")));
+		L.Items.Add(Item(EFOItem::Note, FVector(4650, 300, 60), TEXT("checkpoint_log"),
+			TEXT("دفتر الحاجز:\nتركنا الوقود في ثلاث نقاط على طول الشارع. المولّد قرب نهاية الحاجز، إلى اليسار. يحتاج وقتًا ليستقر — صوته سيجذب المصابين.\nالمصاب بزي الشرطة بطيء لكنه يتحمل أكثر. تراجع عندما يرفع ذراعه؛ ضربته أقوى ويمكن تفاديها. استعمل الحواجز لقطع خط هجومهم.")));
+		AddSupplies(L, { {7950, 180, 40} }, { {8000, 300, 40}, {8400, 200, 40} });
+		L.Stages.Add(Stage({ Obj(EFOObjectiveType::Collect, TEXT("fuel"), 3, TEXT("وقود مولّد الحاجز {n}/{max}"), TEXT("اجمع الوقود ثم استعمله في المولّد قرب نهاية الشارع")) }));
+		L.Stages.Add(Stage({ Obj(EFOObjectiveType::SolvePuzzle, TEXT("checkpoint_generator"), 1,
+			TEXT("شغّل المولّد ودافع قربه"), TEXT("الوقود جاهز — اقترب من المولّد يسار نهاية الشارع واضغط تفاعل")) }));
+		L.Stages.Add(Stage({ Obj(EFOObjectiveType::Reach, NAME_None, 1, TEXT("اعبر الحاجز نحو محطة الكهرباء"), TEXT("استقرت الطاقة! الحاجز مفتوح — توجّه إلى سيدي الهواري")) }));
+		L.OutroText = TEXT("اشتغل مولّد الحاجز. الآن أعد التيار من محطة سيدي الهواري لفتح طريق الميناء.");
 		Levels.Add(L);
 	}
 
@@ -41,7 +51,7 @@ static TArray<FFOLevelDef> BuildCampaign()
 		FFOLevelDef L;
 		L.Id = TEXT("power");
 		L.Title = TEXT("محطة كهرباء سيدي الهواري");
-		L.Intro = TEXT("البوابة الكهربائية معطّلة. أعد التيار بترتيب القواطع الصحيح.");
+		L.Intro = TEXT("عبرت الحاجز. أمّن الشارع ثم أعد تيار الميناء من لوحة القواطع.");
 		L.Seed = 7712; L.StreetLength = 8000.f; L.ZombieCount = 20; L.RunnerChance = 0.3f;
 		L.Lighting.FogColor = FLinearColor(0.10f, 0.06f, 0.05f); L.Lighting.FogDensity = 0.016f;
 		L.Lighting.MoonColor = FLinearColor(0.7f, 0.62f, 0.55f);
