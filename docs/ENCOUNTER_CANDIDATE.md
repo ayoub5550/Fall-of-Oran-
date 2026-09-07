@@ -53,4 +53,20 @@ results are recorded separately below after execution.
   Player/tripod still overlap part of the machine; the surrounding street is
   very dark and this is NOT final art acceptance. Crate/bench/barrier are not
   all established by this single view.
-- Android archive results: pending at this checkpoint.
+- Android BuildCookRun succeeded. The archive was emitted directly into the
+  selected archive directory, not an Android_ASTC subdirectory; initial checker
+  invocation used the wrong path, then was rerun against the actual artifact.
+- APK at gameplay commit `1023167`: 188,675,623 bytes; SHA256
+  `7f5369abd8716a9e062818318ee44c9039cade9084e474c89c964c5289220ff4`.
+  Package `com.ayoub5550.falloforan`, version 2.1/code21, arm64-v8a, Development.
+  218 required assets present, 352 game entries, none missing; ZIP/embedded
+  content, signature v2 and 16KB alignment checks passed.
+- Debug signer changed again relative to the preserved touch baseline:
+  SHA256 `67fae7ab1d7fc52cf6acbad7c5d015b7e337279a03bb6c6e762a2e9ca8b3a34f`.
+  Android may reject installing as an update. Preserve important progress before
+  any uninstall, which can erase it. Establish a stable signing key before
+  further distribution; this debug artifact is not Play Store release signing.
+- No new Appetize session or physical Android validation. Previous tested
+  Appetize devices were blocked before menu by the engine ES 3.2 requirement.
+- No ordinary-control complete encounter playthrough or frame-pacing benchmark.
+  This is a delivered test candidate, not completion of all gameplay/art goals.
