@@ -84,6 +84,11 @@ void AFOGameMode::BeginPlay()
 	bSelfTest = FParse::Param(FCommandLine::Get(), TEXT("FOSelfTest"));
 	{ int32 Skip = 0; if (FParse::Value(FCommandLine::Get(), TEXT("FOShotSkip="), Skip)) ShotIndex = Skip; } // -FOShotSkip=3 renders only the puzzle view
 	if (bShotMode) GAreScreenMessagesEnabled = false;
+	if (GI && GI->bContinueIntoLevel)
+	{
+		GI->bContinueIntoLevel = false;
+		StartGame();
+	}
 }
 
 void AFOGameMode::EndPlay(const EEndPlayReason::Type Reason)
@@ -126,7 +131,7 @@ void AFOGameMode::StartGame()
 	if (State == EFOState::Won)
 	{
 		UFOGameInstance* GI = UFOGameInstance::Get(this);
-		if (GI && !bCampaignDone) GI->AdvanceToNextLevel();
+		if (GI && !bCampaignDone) GI->bContinueIntoLevel = GI->AdvanceToNextLevel();
 		else if (GI) GI->SelectLevel(0);
 		Restart();
 	}

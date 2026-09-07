@@ -38,6 +38,8 @@ public:
 	bool IsCampaignFinished() const;
 	/** Advance SelectedLevel to the next level (clamped). Returns false if there is none. */
 	bool AdvanceToNextLevel();
+	/** One-shot handoff; not persisted. Reload remains, duplicate start menu does not. */
+	bool bContinueIntoLevel = false;
 
 	void SetBrightness(float B) { Progress.Brightness = FMath::Clamp(B, 0.25f, 4.f); Save(); }
 	float Brightness() const { return Progress.Brightness; }

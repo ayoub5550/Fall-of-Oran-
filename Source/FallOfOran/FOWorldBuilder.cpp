@@ -7,6 +7,7 @@
 #include "Mission/FOMissionComponent.h"
 #include "Puzzles/FOBreakerPuzzle.h"
 #include "Puzzles/FOKeypadPuzzle.h"
+#include "Puzzles/FOGeneratorPuzzle.h"
 #include "Puzzles/FONote.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -618,6 +619,7 @@ void AFOWorldBuilder::SpawnPuzzles()
 		{
 		case EFOPuzzleType::BreakerSequence: Cls = AFOBreakerPuzzle::StaticClass(); break;
 		case EFOPuzzleType::Keypad:          Cls = AFOKeypadPuzzle::StaticClass(); break;
+		case EFOPuzzleType::Generator:       Cls = AFOGeneratorPuzzle::StaticClass(); break;
 		}
 		if (!Cls) continue;
 		AFOPuzzleBase* P = GetWorld()->SpawnActor<AFOPuzzleBase>(Cls, PD.Location, FRotator(0, PD.Yaw, 0));

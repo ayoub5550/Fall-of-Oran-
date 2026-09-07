@@ -76,6 +76,7 @@ enum class EFOPuzzleType : uint8
 {
 	BreakerSequence,  // press N breakers in the right order (order written on a note)
 	Keypad,           // enter a numeric code; digits are found on notes scattered in the level
+	Generator,        // fueled by the previous mission stage; defend nearby during startup
 };
 
 USTRUCT()
